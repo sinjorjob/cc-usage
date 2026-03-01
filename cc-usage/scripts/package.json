@@ -1,0 +1,17 @@
+{
+  "name": "cc-usage",
+  "version": "1.0.0",
+  "description": "Claude Code usage rate 3D character gadget",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  }
+}

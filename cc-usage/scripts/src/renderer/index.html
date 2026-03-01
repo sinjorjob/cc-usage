@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>CC-Usage</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../node_modules/three/build/three.module.min.js"
+    }
+  }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+    }
+    #character-container {
+      width: 200px; height: 200px;
+      position: relative;
+      cursor: grab;
+    }
+    #character-container:active { cursor: grabbing; }
+    #character-canvas { width: 100%; height: 100%; display: block; }
+
+    /* Usage badge */
+    #usage-badge {
+      position: absolute;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 16px;
+      border-radius: 12px;
+      background: rgba(15, 15, 25, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(210, 140, 80, 0.3);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+
+    #usage-main {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #usage-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: #4ade80;
+      flex-shrink: 0;
+      transition: background 0.5s, box-shadow 0.5s;
+    }
+    #usage-text {
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 14px;
+      font-weight: bold;
+      color: rgba(210, 175, 140, 0.95);
+      white-space: nowrap;
+      transition: color 0.5s;
+    }
+
+    #usage-reset {
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 10px;
+      color: rgba(180, 160, 140, 0.65);
+      white-space: nowrap;
+    }
+
+    /* Status colors */
+    #usage-badge.level-low #usage-dot {
+      background: #4ade80;
+      box-shadow: 0 0 4px rgba(74, 222, 128, 0.4);
+    }
+    #usage-badge.level-low #usage-text { color: #86efac; }
+
+    #usage-badge.level-mid #usage-dot {
+      background: #fbbf24;
+      box-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
+    }
+    #usage-badge.level-mid #usage-text { color: #fde68a; }
+
+    #usage-badge.level-high #usage-dot {
+      background: #f87171;
+      box-shadow: 0 0 6px rgba(248, 113, 113, 0.5);
+      animation: dotPulse 0.8s infinite;
+    }
+    #usage-badge.level-high #usage-text { color: #fca5a5; }
+
+    #usage-badge.fetching #usage-dot {
+      background: #a78bfa;
+      box-shadow: 0 0 6px rgba(167, 139, 250, 0.5);
+      animation: dotPulse 1s infinite;
+    }
+    #usage-badge.fetching #usage-text { color: rgba(210, 175, 140, 0.7); }
+
+    #usage-badge.error #usage-dot {
+      background: #6b7280;
+    }
+    #usage-badge.error #usage-text { color: rgba(180, 160, 140, 0.5); }
+
+    @keyframes dotPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Sparkle particles */
+    .sparkle {
+      position: absolute;
+      color: rgba(212, 165, 116, 0.7);
+      font-size: 14px;
+      pointer-events: none;
+      animation: sparkleFade 1s ease-out forwards;
+    }
+    @keyframes sparkleFade {
+      0% { opacity: 0.8; transform: translateY(0) scale(1) rotate(0deg); }
+      100% { opacity: 0; transform: translateY(-40px) scale(0.3) rotate(180deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="character-container">
+    <canvas id="character-canvas"></canvas>
+    <div id="usage-badge" class="fetching">
+      <div id="usage-main">
+        <div id="usage-dot"></div>
+        <span id="usage-text">Loading...</span>
+      </div>
+      <span id="usage-reset"></span>
+    </div>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
