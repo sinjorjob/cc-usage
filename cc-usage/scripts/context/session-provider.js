@@ -47,18 +47,25 @@ class SessionProvider {
         } catch (e) { /* skip unreadable dirs */ }
       }
 
-      // Sort by most recently modified first
-      allFiles.sort((a, b) => b.mtime - a.mtime);
-
-      // Find the first file with real assistant usage data (>1000 tokens = real session)
+      // Read usage data from each file and sort by assistant message timestamp
+      // This correctly identifies the ACTIVE session regardless of file mtime/birthtime
+      const candidates = [];
       for (const file of allFiles) {
         const result = this._readLastAssistantUsage(file.path);
         if (result && result.totalContext > 1000) {
-          this.cwd = file.project;
-          this._cachedJsonlPath = file.path;
-          console.log(`[session-provider] Auto-detected: ${file.project} -> ${file.path}, total=${result.totalContext}`);
-          return file.project;
+          candidates.push({ ...file, result });
         }
+      }
+
+      // Sort by last assistant message timestamp (most recent first)
+      candidates.sort((a, b) => b.result.timestamp - a.result.timestamp);
+
+      if (candidates.length > 0) {
+        const best = candidates[0];
+        this.cwd = best.project;
+        this._cachedJsonlPath = best.path;
+        console.log(`[session-provider] Auto-detected: ${best.project} -> ${path.basename(best.path)}, total=${best.result.totalContext}, ts=${new Date(best.result.timestamp).toISOString()}`);
+        return best.project;
       }
 
       console.log('[session-provider] No active session with usage data found');
@@ -153,6 +160,7 @@ class SessionProvider {
             cacheRead,
             cacheCreate,
             sessionId,
+            timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : 0,
           };
         }
       } catch (e) {

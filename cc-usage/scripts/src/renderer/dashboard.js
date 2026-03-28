@@ -58,7 +58,6 @@ class CosmosView {
   _buildNebulae(data) {
     const CW = this.canvas.width, CH = this.canvas.height;
     const cats = data.categories;
-    const TOT = data.totalTokens;
     const maxTokens = Math.max(...cats.map(c => c.tokens));
     const BASE_R = 22, MAX_R = 130;
 
@@ -66,76 +65,36 @@ class CosmosView {
       return BASE_R + (MAX_R - BASE_R) * Math.pow(tokens / maxTokens, 0.5);
     }
 
-    const sorted = [...cats].sort((a, b) => b.tokens - a.tokens);
     const oc = this.orbitCenter;
 
-    // Initial placement: largest at center, rest at angles with distance based on size
-    const placed = [{ ...sorted[0], x: oc.x, y: oc.y, r: tokenToRadius(sorted[0].tokens) }];
-    const others = sorted.slice(1);
-    for (let i = 0; i < others.length; i++) {
-      const c = others[i];
+    // Fixed position map: consistent layout regardless of data
+    // Key matching is case-insensitive substring
+    const positionMap = {
+      messages:        { x: oc.x + 30,  y: oc.y },            // center
+      memory:          { x: oc.x + 250, y: oc.y - 60 },       // far right
+      'system prompt': { x: oc.x - 180, y: oc.y + 200 },      // bottom-left
+      'system tool':   { x: oc.x + 180, y: oc.y + 200 },      // bottom-right
+      skill:           { x: oc.x - 260, y: oc.y - 40 },       // far left
+      autocompact:     { x: oc.x - 120, y: oc.y - 240 },      // top-left
+    };
+
+    const placed = cats.map(c => {
       const r = tokenToRadius(c.tokens);
-      const angle = (i / others.length) * Math.PI * 2 - Math.PI / 2;
-      const dist = placed[0].r + r + 60;
-      placed.push({
-        ...c, r,
-        x: oc.x + Math.cos(angle) * dist,
-        y: oc.y + Math.sin(angle) * dist * 0.72,
-      });
-    }
-
-    // Force-directed separation: iteratively push overlapping items apart
-    const GAP = 30; // minimum gap between nebula edges
-    for (let iter = 0; iter < 100; iter++) {
-      let moved = false;
-      for (let i = 1; i < placed.length; i++) {
-        for (let j = 0; j < placed.length; j++) {
-          if (i === j) continue;
-          const a = placed[i], b = placed[j];
-          const dx = a.x - b.x, dy = a.y - b.y;
-          const dist = Math.hypot(dx, dy);
-          const minDist = a.r + b.r + GAP;
-          if (dist < minDist && dist > 0) {
-            const push = (minDist - dist) * 0.5;
-            const nx = dx / dist, ny = dy / dist;
-            // Only move i (keep center and earlier items stable)
-            if (j === 0) {
-              a.x += nx * push * 2;
-              a.y += ny * push * 2;
-            } else {
-              a.x += nx * push;
-              a.y += ny * push;
-              b.x -= nx * push;
-              b.y -= ny * push;
-            }
-            moved = true;
-          }
-        }
-        // Clamp within canvas
-        const m = placed[i].r + 10;
-        placed[i].x = Math.max(m, Math.min(CW - m, placed[i].x));
-        placed[i].y = Math.max(m + 30, Math.min(CH - m - 10, placed[i].y));
+      const name = (c.name || '').toLowerCase();
+      // Find matching fixed position
+      let pos = null;
+      for (const [key, p] of Object.entries(positionMap)) {
+        if (name.includes(key)) { pos = p; break; }
       }
-      if (!moved) break;
-    }
+      if (!pos) pos = { x: oc.x, y: oc.y }; // fallback
+      return { ...c, r, x: pos.x, y: pos.y };
+    });
 
-    // Nudge Skills (further left) and Autocompact buffer (further up)
+    // Clamp within canvas
     for (const p of placed) {
-      const name = (p.name || '').toLowerCase();
-      if (name.includes('skill')) {
-        p.x -= 70;
-        p.y -= 15;
-      } else if (name.includes('autocompact')) {
-        p.x -= 90;
-        p.y -= 160;
-      }
-      if (name.includes('skill') || name.includes('autocompact')) {
-        const m = p.r + 10;
-        p.x = Math.max(m, Math.min(CW - m, p.x));
-        // Allow autocompact closer to top edge
-        const topMin = name.includes('autocompact') ? 15 : m + 30;
-        p.y = Math.max(topMin, Math.min(CH - m - 10, p.y));
-      }
+      const m = p.r + 10;
+      p.x = Math.max(m, Math.min(CW - m, p.x));
+      p.y = Math.max(15, Math.min(CH - m - 10, p.y));
     }
 
     this.nebulae = placed.map((n, i) => {

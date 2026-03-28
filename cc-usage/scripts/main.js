@@ -275,14 +275,23 @@ async function fetchContext() {
     // Cache baseline for JSONL-only refreshes (deep copy categories)
     lastBaselineData = JSON.parse(JSON.stringify(data));
 
-    // Auto-detect latest session on every refresh
-    const detected = sessionProvider.autoDetect();
-    sessionLog(`autoDetect result: ${detected}, cachedPath: ${sessionProvider._cachedJsonlPath}`);
+    // Auto-detect session only once (on first load). Subsequent refreshes keep the same session.
+    // To switch sessions, restart cc-usage.
+    if (!sessionProvider._cachedJsonlPath) {
+      const detected = sessionProvider.autoDetect();
+      sessionLog(`autoDetect result: ${detected}, cachedPath: ${sessionProvider._cachedJsonlPath}`);
+    } else {
+      sessionLog(`Using cached session: ${sessionProvider._cachedJsonlPath}`);
+    }
     const jsonlData = sessionProvider.fetchFromJsonl();
     sessionLog(`baseline cats: ${data.categories.length}, jsonl: ${jsonlData ? 'total=' + jsonlData.totalContext : 'null'}`);
 
     if (jsonlData) {
       applyJsonlToContext(data, jsonlData);
+    } else {
+      // No JSONL data (fresh session after /clear) — still filter deferred categories
+      data.categories = data.categories.filter(c =>
+        !c.name.toLowerCase().includes('deferred'));
     }
 
     lastContextData = data;
@@ -305,8 +314,7 @@ function refreshFromJsonl() {
   if (!lastBaselineData || !dashboardWindow) return;
 
   try {
-    // Re-detect in case session changed
-    sessionProvider.autoDetect();
+    // Use cached JSONL path only — don't re-detect to avoid switching sessions
     const jsonlData = sessionProvider.fetchFromJsonl();
     if (!jsonlData) return;
 
@@ -349,8 +357,9 @@ function startJsonlWatch() {
   jsonlWatchInterval = setInterval(() => {
     if (!dashboardWindow || !sessionProvider._cachedJsonlPath) return;
     try {
-      const jsonlPath = sessionProvider._cachedJsonlPath;
-      const currentMtime = fs.statSync(jsonlPath).mtimeMs;
+      // Only watch the current file for changes — no session switching here.
+      // Session switching is handled by autoDetect() in fetchContext() (manual refresh).
+      const currentMtime = fs.statSync(sessionProvider._cachedJsonlPath).mtimeMs;
       if (currentMtime !== lastJsonlMtime) {
         sessionLog(`JSONL changed (mtime: ${lastJsonlMtime} → ${currentMtime}), refreshing...`);
         lastJsonlMtime = currentMtime;
