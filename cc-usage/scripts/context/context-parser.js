@@ -84,6 +84,45 @@ function parseContextOutput(text) {
     }
   }
 
+  // Fallback: Parse ANSI-style /context output (from user's chat)
+  // Format: "⛁ System prompt: 6.4k tokens (0.6%)" or "Messages: 92k tokens (9.2%)"
+  if (result.categories.length === 0) {
+    const ansiLines = clean.split('\n');
+    for (const line of ansiLines) {
+      const ansiMatch = line.match(/(?:⛁|⛀|⛶|⛝)\s*(.+?):\s*([\d.,]+)([km])?\s*tokens?\s*\((\d+(?:\.\d+)?)%\)/i);
+      if (ansiMatch) {
+        const name = ansiMatch[1].trim();
+        const tokens = parseTokenValue(ansiMatch[2].replace(',', ''), ansiMatch[3]);
+        const percent = parseFloat(ansiMatch[4]);
+        const key = name.toLowerCase();
+
+        if (key === 'free space') {
+          result.freeSpace = { tokens, percent };
+        } else if (key === 'autocompact buffer') {
+          // skip, not a primary category
+        } else {
+          result.categories.push({
+            key: toCamelCase(name),
+            name,
+            tokens,
+            percent,
+            color: colorMap[key] || '#888888',
+            ja: jaMap[key]?.ja || name,
+            desc: jaMap[key]?.desc || '',
+          });
+        }
+      }
+    }
+
+    // Parse total tokens from ANSI: "125k/1000k tokens" or "132k/1000k"
+    const totalMatch = clean.match(/([\d.,]+)([km])?\s*\/\s*([\d.,]+)([km])?\s*(?:tokens)?\s*\((\d+(?:\.\d+)?)%\)/i);
+    if (totalMatch) {
+      result.usedTokens = parseTokenValue(totalMatch[1].replace(',', ''), totalMatch[2]);
+      result.totalTokens = parseTokenValue(totalMatch[3].replace(',', ''), totalMatch[4]);
+      result.usagePercent = parseFloat(totalMatch[5]);
+    }
+  }
+
   // Parse MCP Tools table
   const mcpMatch = clean.match(/#{2,3}\s*MCP Tools[\s\S]*?(?=#{2,3}\s|$)/);
   if (mcpMatch) {

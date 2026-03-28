@@ -25,6 +25,7 @@ class CosmosView {
     this.labelEls = [];
     this.orbitCenter = { x: 0, y: 0 };
     this.data = null;
+    this.viewAngle = 0;
   }
 
   init(data) {
@@ -90,7 +91,7 @@ class CosmosView {
       const dx = n.x - oc.x, dy = n.y - oc.y;
       const orbitRadius = Math.hypot(dx, dy);
       const orbitAngle0 = Math.atan2(dy, dx);
-      const orbitSpeed = i === 0 ? 0.003 : 0.012 / (1 + i * 0.3);
+      const orbitSpeed = 0; // Fixed positions, no orbital movement
 
       return {
         ...n, orbitRadius, orbitAngle0, orbitSpeed, orbitEllipse: 0.7,
@@ -158,7 +159,7 @@ class CosmosView {
     const overlayH = this.canvas.clientHeight;
     const oc = this.orbitCenter;
     for (const { el, n } of this.labelEls) {
-      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed;
+      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed ;
       const cx = oc.x + Math.cos(orbAngle) * n.orbitRadius;
       const cy = oc.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse;
       // Clamp position within overlay bounds
@@ -236,7 +237,7 @@ class CosmosView {
     }
     // DEBUG: draw bright circles at nebula positions to verify rendering
     for (const n of this.nebulae) {
-      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed;
+      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed ;
       const debugX = oc.x + Math.cos(orbAngle) * n.orbitRadius;
       const debugY = oc.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse;
       ctx.beginPath();
@@ -252,7 +253,7 @@ class CosmosView {
         + Math.sin(t * 0.25 + n.pulseOffset * 0.7) * 0.015;
       const r = n.r * breath;
 
-      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed;
+      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed ;
       const nx = oc.x + Math.cos(orbAngle) * n.orbitRadius + Math.sin(t * 0.15 + n.pulseOffset) * 5;
       const ny = oc.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse + Math.cos(t * 0.12 + n.pulseOffset) * 4;
 
@@ -368,7 +369,7 @@ class CosmosView {
     const rx = CW / 2 - 6, ry = CH / 2 - 6;
 
     ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 2; ctx.stroke();
 
     const usedAngle = (usedPct / 100) * Math.PI * 2;
     ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, -Math.PI / 2, -Math.PI / 2 + usedAngle);
@@ -381,10 +382,13 @@ class CosmosView {
     ctx.beginPath(); ctx.arc(dotX, dotY, 4 + Math.sin(t * 3) * 1.5, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(74, 222, 128, 0.8)'; ctx.fill();
 
+    // Draw percentage label just inside the ring near the dot (same size as top-right)
+    const labelOffsetX = (cx - dotX) * 0.06;
+    const labelOffsetY = (cy - dotY) * 0.06;
     ctx.font = '700 18px "Noto Sans JP"';
-    ctx.fillStyle = 'rgba(74, 222, 128, 0.7)';
+    ctx.fillStyle = 'rgba(74, 222, 128, 0.8)';
     ctx.textAlign = 'center';
-    ctx.fillText(`${usedPct}%`, dotX, dotY + 20);
+    ctx.fillText(`${usedPct}%`, dotX + labelOffsetX, dotY + labelOffsetY + 18);
   }
 }
 

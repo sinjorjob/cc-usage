@@ -8,6 +8,7 @@ const fs = require('fs');
 const { UsageFetcher } = require('./usage-fetcher');
 const { CliProvider } = require('./context/cli-provider');
 const { MockProvider } = require('./context/mock-provider');
+const { SessionProvider } = require('./context/session-provider');
 
 // Disable GPU shader disk cache
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
@@ -25,11 +26,19 @@ let tray = null;
 const fetcher = new UsageFetcher();
 // Use CliProvider (claude -p "/context") with MockProvider fallback
 const contextProvider = new CliProvider();
+const sessionProvider = new SessionProvider();
 let fetchInterval = null;
 let lastUsageData = null;
 let lastContextData = null;
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+const LOG_FILE = path.join(require('os').tmpdir(), 'cc-usage-session.log');
+function sessionLog(msg) {
+  const line = `[${new Date().toISOString()}] [main] ${msg}\n`;
+  require('fs').appendFileSync(LOG_FILE, line);
+  console.log(`[cc-usage] ${msg}`);
+}
 
 // ==================== Config (position save/load) ====================
 const configFile = path.join(app.getPath('userData'), 'cc-usage-config.json');
@@ -201,17 +210,63 @@ function openDashboard() {
   dashboardWindow.setVisibleOnAllWorkspaces(true);
   dashboardWindow.on('closed', () => { dashboardWindow = null; });
 
-  // Send context data once loaded
+  // Auto-detect active session and fetch context once loaded
   dashboardWindow.webContents.on('did-finish-load', () => {
+    if (!sessionProvider.cwd) {
+      sessionProvider.autoDetect();
+    }
     fetchContext();
   });
 }
 
 // ==================== Context Fetching ====================
+// 1. Fetch baseline (System+Tools+Memory+Skills) via claude -p "/context"
+// 2. Read JSONL file for real context usage (cache_read + cache_creation)
+// 3. Messages = JSONL total - baseline
 async function fetchContext() {
   if (dashboardWindow) dashboardWindow.webContents.send('context-fetching');
   try {
+    // Fetch baseline via /context (new session, Messages≈0)
     const data = await contextProvider.fetch();
+
+    // Auto-detect latest session on every refresh
+    const detected = sessionProvider.autoDetect();
+    sessionLog(`autoDetect result: ${detected}, cachedPath: ${sessionProvider._cachedJsonlPath}`);
+    const jsonlData = sessionProvider.fetchFromJsonl();
+    sessionLog(`baseline cats: ${data.categories.length}, jsonl: ${jsonlData ? 'total=' + jsonlData.totalContext : 'null'}`);
+
+    if (jsonlData) {
+      // Baseline = sum of active overhead categories only
+      // Exclude: messages (what we're calculating), deferred (not in context), autocompact buffer (reserved space, not actual tokens)
+      const baseline = data.categories
+        .filter(c => c.key !== 'messages'
+          && !c.name.toLowerCase().includes('deferred')
+          && !c.name.toLowerCase().includes('autocompact'))
+        .reduce((sum, c) => sum + c.tokens, 0);
+
+      const messagesTokens = Math.max(0, jsonlData.totalContext - baseline);
+      const messagesPercent = Math.round((messagesTokens / data.totalTokens) * 1000) / 10;
+
+      const msgCat = data.categories.find(c => c.key === 'messages');
+      if (msgCat) {
+        msgCat.tokens = messagesTokens;
+        msgCat.percent = messagesPercent;
+      }
+
+      // Recalculate totals using JSONL total (= actual active context, excludes deferred)
+      data.usedTokens = jsonlData.totalContext;
+      data.usagePercent = Math.round((data.usedTokens / data.totalTokens) * 1000) / 10;
+      data.freeSpace = {
+        tokens: data.totalTokens - data.usedTokens,
+        percent: Math.round((1 - data.usedTokens / data.totalTokens) * 1000) / 10,
+      };
+      // Remove deferred categories from display (not in active context)
+      // Keep autocompact buffer as it's informational
+      data.categories = data.categories.filter(c =>
+        !c.name.toLowerCase().includes('deferred'));
+      sessionLog(`Messages: ${messagesTokens} (${messagesPercent}%), baseline: ${baseline}, jsonlTotal: ${jsonlData.totalContext}`);
+    }
+
     lastContextData = data;
     if (dashboardWindow) dashboardWindow.webContents.send('context-update', data);
   } catch (err) {
@@ -295,6 +350,18 @@ function setupIPC() {
   ipcMain.on('refresh-context', () => fetchContext());
 
   ipcMain.handle('get-last-context', () => lastContextData);
+
+  // ---- Session CWD (for JSONL file lookup) ----
+  ipcMain.on('set-session-cwd', (event, cwd) => {
+    if (cwd) {
+      sessionProvider.setCwd(cwd);
+      sessionLog(`Session CWD set: ${cwd}`);
+      // Re-fetch context with JSONL-based Messages
+      fetchContext();
+    }
+  });
+
+  ipcMain.handle('get-session-cwd', () => sessionProvider.cwd);
 }
 
 // ==================== Quit ====================

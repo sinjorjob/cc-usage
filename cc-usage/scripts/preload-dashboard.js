@@ -18,4 +18,8 @@ contextBridge.exposeInMainWorld('dashboardAPI', {
   onContextUpdate: (cb) => ipcRenderer.on('context-update', (_, data) => cb(data)),
   onContextFetching: (cb) => ipcRenderer.on('context-fetching', () => cb()),
   onContextError: (cb) => ipcRenderer.on('context-error', (_, err) => cb(err)),
+
+  // Session (live Messages)
+  setSessionCwd: (cwd) => ipcRenderer.send('set-session-cwd', cwd),
+  getSessionCwd: () => ipcRenderer.invoke('get-session-cwd'),
 });
