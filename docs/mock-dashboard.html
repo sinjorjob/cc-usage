@@ -262,14 +262,14 @@
     z-index: 2;
   }
   .cosmos-label .cl-name {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 10.5px; font-weight: 600; letter-spacing: 1px;
-    text-shadow: 0 0 14px currentColor, 0 0 6px currentColor, 0 1px 4px rgba(0,0,0,0.9);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    text-shadow: 0 0 12px currentColor, 0 0 5px currentColor, 0 1px 5px rgba(0,0,0,1);
   }
   .cosmos-label .cl-val {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 9.5px; color: rgba(255,255,255,0.7);
-    text-shadow: 0 0 8px rgba(255,255,255,0.3), 0 1px 3px rgba(0,0,0,0.9);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.8);
+    text-shadow: 0 0 8px rgba(255,255,255,0.3), 0 1px 4px rgba(0,0,0,1);
   }
   .cosmos-label .cl-tip {
     visibility: hidden; opacity: 0;
@@ -1017,32 +1017,43 @@ for (let i = 0; i < sorted.length; i++) {
   const c = sorted[i];
   const r = tokenToRadius(c.tokens);
 
-  if (i === 0) {
-    // Largest (Messages) goes center-ish
-    placed.push({ ...c, x: CW * 0.42, y: CH * 0.48, r });
-  } else {
-    // Find position that's closest to center but doesn't overlap
-    let bestX = CW / 2, bestY = CH / 2, bestDist = Infinity;
-    for (let attempt = 0; attempt < 300; attempt++) {
-      const angle = (attempt / 300) * Math.PI * 2 + i * 1.1;
-      const dist = 30 + attempt * 1.2;
-      const tx = CW * 0.42 + Math.cos(angle) * dist;
-      const ty = CH * 0.48 + Math.sin(angle) * dist * 0.75;
+  const cx0 = CW * 0.46, cy0 = CH / 2;
+  const PAD = 50; // boundary padding
+  const GAP = 18; // minimum gap between nebulae
 
-      // Check no overlap with placed nebulae
+  if (i === 0) {
+    // Largest goes exact center
+    placed.push({ ...c, x: cx0, y: cy0, r });
+  } else {
+    // Spiral outward from center, checking for overlap-free spots
+    let bestX = cx0, bestY = cy0, bestDist = Infinity;
+    let found = false;
+
+    for (let attempt = 0; attempt < 600; attempt++) {
+      // Golden angle spiral for even distribution
+      const goldenAngle = attempt * 2.399963 + i * 0.8;
+      const dist = 20 + attempt * 0.9;
+      const tx = cx0 + Math.cos(goldenAngle) * dist;
+      const ty = cy0 + Math.sin(goldenAngle) * dist * 0.72;
+
+      // Check overlap with all placed nebulae
       let overlap = false;
       for (const p of placed) {
         const dx = tx - p.x, dy = ty - p.y;
-        const minDist = r + p.r + 12; // 12px gap
+        const minDist = r + p.r + GAP;
         if (dx * dx + dy * dy < minDist * minDist) { overlap = true; break; }
       }
-      // Stay in bounds
-      if (tx - r < 20 || tx + r > CW - 20 || ty - r < 20 || ty + r > CH - 20) overlap = true;
+
+      // Stay within bounds
+      if (tx - r < PAD || tx + r > CW - PAD || ty - r < PAD || ty + r > CH - PAD) overlap = true;
 
       if (!overlap) {
-        const cd = Math.hypot(tx - CW * 0.42, ty - CH * 0.48);
-        if (cd < bestDist) { bestDist = cd; bestX = tx; bestY = ty; }
-        if (cd < r + 50) break; // good enough, close to center
+        const cd = Math.hypot(tx - cx0, ty - cy0);
+        if (cd < bestDist) {
+          bestDist = cd; bestX = tx; bestY = ty;
+          found = true;
+        }
+        if (found && cd < r + 80) break;
       }
     }
     placed.push({ ...c, x: bestX, y: bestY, r });
@@ -1107,9 +1118,15 @@ function drawRingGauge(ctx, t) {
   const dotX = cx + rx * Math.cos(dotAngle);
   const dotY = cy + ry * Math.sin(dotAngle);
   ctx.beginPath();
-  ctx.arc(dotX, dotY, 3 + Math.sin(t * 3) * 1, 0, Math.PI * 2);
+  ctx.arc(dotX, dotY, 4 + Math.sin(t * 3) * 1.5, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(74, 222, 128, 0.8)';
   ctx.fill();
+
+  // Label just below the ring dot (same size as top-right usage rate)
+  ctx.font = '700 18px "Noto Sans JP"';
+  ctx.fillStyle = 'rgba(74, 222, 128, 0.7)';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${usedPct}%`, dotX, dotY + 20);
 }
 
 function drawCosmos(t) {
@@ -1313,43 +1330,17 @@ function drawCosmos(t) {
     cosmosCtx.stroke();
   }
 
-  // "FREE SPACE" text - find empty area away from nebulae
-  // Dynamic position: scan right side for least nebula overlap
-  let freeX = CW * 0.82, freeY = CH * 0.18;
-  // Push away from nearby nebulae
-  for (const n of nebulae) {
-    const dx = freeX - n.x, dy = freeY - n.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist < n.r * 2.5) {
-      freeX += dx / dist * 30;
-      freeY += dy / dist * 20;
-    }
-  }
-  // Clamp to canvas
-  freeX = Math.min(CW - 80, Math.max(80, freeX));
-  freeY = Math.min(CH - 40, Math.max(40, freeY));
-
-  const freeAlpha = 0.14 + Math.sin(t * 0.5) * 0.03;
-
-  // Subtle glow behind free space text
-  const freeGlow = cosmosCtx.createRadialGradient(freeX, freeY + 8, 0, freeX, freeY + 8, 120);
-  freeGlow.addColorStop(0, `rgba(80, 120, 180, ${freeAlpha * 0.12})`);
-  freeGlow.addColorStop(1, 'rgba(0,0,0,0)');
-  cosmosCtx.beginPath();
-  cosmosCtx.arc(freeX, freeY + 8, 120, 0, Math.PI * 2);
-  cosmosCtx.fillStyle = freeGlow;
-  cosmosCtx.fill();
-
-  cosmosCtx.font = '700 22px "Noto Sans JP"';
-  cosmosCtx.fillStyle = `rgba(200, 220, 245, ${freeAlpha * 1.8})`;
+  // Title: コンテキスト空間 (center, slightly above middle)
+  cosmosCtx.font = '600 20px "Noto Sans JP"';
+  cosmosCtx.fillStyle = 'rgba(200, 220, 245, 0.3)';
   cosmosCtx.textAlign = 'center';
-  cosmosCtx.fillText('\u7A7A\u304D\u9818\u57DF', freeX, freeY);
+  cosmosCtx.fillText('\u30B3\u30F3\u30C6\u30AD\u30B9\u30C8\u7A7A\u9593', CW / 2, 50);
 
-  // Usage summary top-right (usage rate only)
-  cosmosCtx.font = '700 15px "Noto Sans JP"';
-  cosmosCtx.fillStyle = 'rgba(74, 222, 128, 0.55)';
+  // Usage summary top-right
+  cosmosCtx.font = '700 18px "Noto Sans JP"';
+  cosmosCtx.fillStyle = 'rgba(74, 222, 128, 0.6)';
   cosmosCtx.textAlign = 'right';
-  cosmosCtx.fillText(`\u4F7F\u7528\u7387 ${usedPct}%`, CW - 16, 24);
+  cosmosCtx.fillText(`\u4F7F\u7528\u7387 ${usedPct}%`, CW - 16, 28);
 }
 
 function hexToRgba(hex, a) {
