@@ -60,31 +60,82 @@ class CosmosView {
     const cats = data.categories;
     const TOT = data.totalTokens;
     const maxTokens = Math.max(...cats.map(c => c.tokens));
-    const BASE_R = 22, MAX_R = 150;
+    const BASE_R = 22, MAX_R = 130;
 
     function tokenToRadius(tokens) {
       return BASE_R + (MAX_R - BASE_R) * Math.pow(tokens / maxTokens, 0.5);
     }
 
     const sorted = [...cats].sort((a, b) => b.tokens - a.tokens);
-    const placed = [];
     const oc = this.orbitCenter;
 
-    // Largest at center
-    placed.push({ ...sorted[0], x: oc.x, y: oc.y, r: tokenToRadius(sorted[0].tokens) });
-
-    // Rest at equal angles
+    // Initial placement: largest at center, rest at angles with distance based on size
+    const placed = [{ ...sorted[0], x: oc.x, y: oc.y, r: tokenToRadius(sorted[0].tokens) }];
     const others = sorted.slice(1);
     for (let i = 0; i < others.length; i++) {
       const c = others[i];
       const r = tokenToRadius(c.tokens);
       const angle = (i / others.length) * Math.PI * 2 - Math.PI / 2;
-      const dist = placed[0].r + r + 50 + r * 0.5;
+      const dist = placed[0].r + r + 60;
       placed.push({
         ...c, r,
         x: oc.x + Math.cos(angle) * dist,
         y: oc.y + Math.sin(angle) * dist * 0.72,
       });
+    }
+
+    // Force-directed separation: iteratively push overlapping items apart
+    const GAP = 30; // minimum gap between nebula edges
+    for (let iter = 0; iter < 100; iter++) {
+      let moved = false;
+      for (let i = 1; i < placed.length; i++) {
+        for (let j = 0; j < placed.length; j++) {
+          if (i === j) continue;
+          const a = placed[i], b = placed[j];
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const dist = Math.hypot(dx, dy);
+          const minDist = a.r + b.r + GAP;
+          if (dist < minDist && dist > 0) {
+            const push = (minDist - dist) * 0.5;
+            const nx = dx / dist, ny = dy / dist;
+            // Only move i (keep center and earlier items stable)
+            if (j === 0) {
+              a.x += nx * push * 2;
+              a.y += ny * push * 2;
+            } else {
+              a.x += nx * push;
+              a.y += ny * push;
+              b.x -= nx * push;
+              b.y -= ny * push;
+            }
+            moved = true;
+          }
+        }
+        // Clamp within canvas
+        const m = placed[i].r + 10;
+        placed[i].x = Math.max(m, Math.min(CW - m, placed[i].x));
+        placed[i].y = Math.max(m + 30, Math.min(CH - m - 10, placed[i].y));
+      }
+      if (!moved) break;
+    }
+
+    // Nudge Skills (further left) and Autocompact buffer (further up)
+    for (const p of placed) {
+      const name = (p.name || '').toLowerCase();
+      if (name.includes('skill')) {
+        p.x -= 70;
+        p.y -= 15;
+      } else if (name.includes('autocompact')) {
+        p.x -= 90;
+        p.y -= 160;
+      }
+      if (name.includes('skill') || name.includes('autocompact')) {
+        const m = p.r + 10;
+        p.x = Math.max(m, Math.min(CW - m, p.x));
+        // Allow autocompact closer to top edge
+        const topMin = name.includes('autocompact') ? 15 : m + 30;
+        p.y = Math.max(topMin, Math.min(CH - m - 10, p.y));
+      }
     }
 
     this.nebulae = placed.map((n, i) => {
@@ -102,13 +153,7 @@ class CosmosView {
           size: Math.random() * 2.5 + 0.5,
           brightness: Math.random() * 0.5 + 0.3,
         })),
-        tendrils: n.r > 50 ? Array.from({ length: Math.floor(n.r / 8) }, () => ({
-          angle: Math.random() * Math.PI * 2,
-          length: 0.6 + Math.random() * 0.8,
-          width: 2 + Math.random() * 4,
-          curve: (Math.random() - 0.5) * 0.8,
-          alpha: 0.04 + Math.random() * 0.08,
-        })) : [],
+        tendrils: [], // removed
         pulseOffset: Math.random() * Math.PI * 2,
       };
     });
@@ -183,133 +228,212 @@ class CosmosView {
 
     ctx.clearRect(0, 0, CW, CH);
 
-    // Background
-    const bg = ctx.createRadialGradient(CW * 0.35, CH * 0.45, 30, CW / 2, CH / 2, CW * 0.75);
-    bg.addColorStop(0, 'rgba(22, 15, 35, 1)');
-    bg.addColorStop(0.4, 'rgba(10, 8, 20, 1)');
-    bg.addColorStop(1, 'rgba(4, 3, 10, 1)');
+    // === Deep space background with multiple gradient layers ===
+    const bg = ctx.createRadialGradient(CW * 0.3, CH * 0.4, 0, CW / 2, CH / 2, CW * 0.8);
+    bg.addColorStop(0, 'rgba(25, 12, 45, 1)');
+    bg.addColorStop(0.3, 'rgba(12, 8, 28, 1)');
+    bg.addColorStop(0.7, 'rgba(6, 4, 16, 1)');
+    bg.addColorStop(1, 'rgba(2, 1, 6, 1)');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, CW, CH);
 
-    // Ambient haze
+    // Secondary galactic glow
+    const bg2 = ctx.createRadialGradient(CW * 0.65, CH * 0.55, 0, CW * 0.6, CH * 0.5, CW * 0.5);
+    bg2.addColorStop(0, 'rgba(20, 8, 40, 0.4)');
+    bg2.addColorStop(0.5, 'rgba(8, 4, 20, 0.2)');
+    bg2.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bg2;
+    ctx.fillRect(0, 0, CW, CH);
+
+    // === Ambient nebula hazes (richer, more layers) ===
     const hazeT = t * 0.03;
     const hazes = [
-      { x: CW * 0.25, y: CH * 0.6, r: 250, color: '80, 40, 120', a: 0.018 },
-      { x: CW * 0.7, y: CH * 0.3, r: 200, color: '30, 60, 100', a: 0.015 },
-      { x: CW * 0.5, y: CH * 0.8, r: 180, color: '100, 50, 40', a: 0.012 },
+      { x: CW * 0.2, y: CH * 0.55, r: 280, color: '90, 30, 140', a: 0.025 },
+      { x: CW * 0.75, y: CH * 0.25, r: 220, color: '20, 60, 120', a: 0.02 },
+      { x: CW * 0.5, y: CH * 0.85, r: 200, color: '120, 40, 30', a: 0.018 },
+      { x: CW * 0.1, y: CH * 0.2, r: 160, color: '40, 80, 60', a: 0.012 },
+      { x: CW * 0.85, y: CH * 0.7, r: 180, color: '60, 20, 80', a: 0.015 },
     ];
     for (const hz of hazes) {
-      const hx = hz.x + Math.sin(hazeT + hz.x * 0.01) * 20;
-      const hy = hz.y + Math.cos(hazeT + hz.y * 0.01) * 15;
+      const hx = hz.x + Math.sin(hazeT + hz.x * 0.01) * 25;
+      const hy = hz.y + Math.cos(hazeT + hz.y * 0.01) * 20;
       const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, hz.r);
       hg.addColorStop(0, `rgba(${hz.color}, ${hz.a})`);
-      hg.addColorStop(0.5, `rgba(${hz.color}, ${hz.a * 0.4})`);
+      hg.addColorStop(0.4, `rgba(${hz.color}, ${hz.a * 0.5})`);
+      hg.addColorStop(0.8, `rgba(${hz.color}, ${hz.a * 0.1})`);
       hg.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.beginPath(); ctx.arc(hx, hy, hz.r, 0, Math.PI * 2); ctx.fillStyle = hg; ctx.fill();
     }
 
-    // Stars
+    // === Stars with color variety and glow ===
+    const starColors = [
+      [220, 225, 255],  // blue-white
+      [255, 240, 220],  // warm white
+      [255, 200, 180],  // orange tint
+      [180, 200, 255],  // blue
+      [255, 220, 200],  // yellow-white
+    ];
     for (const s of this.stars) {
       const twinkle = Math.sin(t * s.twinkleSpeed + s.twinkleOffset) * 0.3 + 0.7;
+      const sc = starColors[Math.floor(s.twinkleOffset * 10) % starColors.length];
+      const alpha = s.brightness * twinkle;
+      // Glow for brighter stars
+      if (s.r > 0.8 && alpha > 0.3) {
+        const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 4);
+        glow.addColorStop(0, `rgba(${sc[0]},${sc[1]},${sc[2]}, ${alpha * 0.3})`);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r * 4, 0, Math.PI * 2); ctx.fillStyle = glow; ctx.fill();
+      }
       ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(220, 210, 240, ${s.brightness * twinkle})`; ctx.fill();
+      ctx.fillStyle = `rgba(${sc[0]},${sc[1]},${sc[2]}, ${alpha})`; ctx.fill();
     }
 
-    // Dust
+    // === Dust with subtle drift ===
     for (const d of this.dust) {
       d.x += d.vx; d.y += d.vy;
       if (d.x < 0) d.x = CW; if (d.x > CW) d.x = 0;
       if (d.y < 0) d.y = CH; if (d.y > CH) d.y = 0;
       ctx.beginPath(); ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(180, 170, 200, ${d.alpha})`; ctx.fill();
+      ctx.fillStyle = `rgba(180, 170, 210, ${d.alpha})`; ctx.fill();
     }
 
-    // Ring gauge
+    // === Ring gauge ===
     this._drawRingGauge(ctx, t, CW, CH, usedPct);
 
-    // Nebulae
-    if (!this._loggedOnce) {
-      console.log('[cosmos] drawing nebulae:', this.nebulae.length);
-      for (const nb of this.nebulae) {
-        console.log(`  ${nb.name}: r=${nb.r.toFixed(0)} pos=(${nb.x.toFixed(0)},${nb.y.toFixed(0)}) color=${nb.color} orbit=${nb.orbitRadius.toFixed(0)}`);
+    // === Aurora plasma streams between nebulae ===
+    if (this.nebulae.length > 1) {
+      for (let i = 0; i < this.nebulae.length; i++) {
+        const a = this.nebulae[i];
+        const b = this.nebulae[(i + 1) % this.nebulae.length];
+        const aAngle = a.orbitAngle0 + t * a.orbitSpeed;
+        const bAngle = b.orbitAngle0 + t * b.orbitSpeed;
+        const ax = oc.x + Math.cos(aAngle) * a.orbitRadius;
+        const ay = oc.y + Math.sin(aAngle) * a.orbitRadius * a.orbitEllipse;
+        const bx = oc.x + Math.cos(bAngle) * b.orbitRadius;
+        const by = oc.y + Math.sin(bAngle) * b.orbitRadius * b.orbitEllipse;
+        const mx = (ax + bx) / 2, my = (ay + by) / 2;
+        const perpX = -(by - ay), perpY = (bx - ax);
+        const dist = Math.hypot(bx - ax, by - ay);
+
+        // Draw 3 layered ribbon strands (aurora effect)
+        for (let strand = 0; strand < 3; strand++) {
+          const strandPhase = strand * 2.1 + i * 1.7;
+          const waveFactor = 0.15 + strand * 0.08;
+          const wave1 = Math.sin(t * 0.3 + strandPhase) * waveFactor;
+          const wave2 = Math.cos(t * 0.22 + strandPhase + 1.2) * waveFactor * 0.7;
+          const cpx1 = ax + (bx - ax) * 0.33 + perpX * wave1 + Math.sin(t * 0.5 + strandPhase) * 8;
+          const cpy1 = ay + (by - ay) * 0.33 + perpY * wave1 + Math.cos(t * 0.4 + strandPhase) * 6;
+          const cpx2 = ax + (bx - ax) * 0.66 + perpX * wave2 + Math.cos(t * 0.45 + strandPhase) * 8;
+          const cpy2 = ay + (by - ay) * 0.66 + perpY * wave2 + Math.sin(t * 0.35 + strandPhase) * 6;
+
+          const ribbonAlpha = (0.025 - strand * 0.006) * (0.8 + Math.sin(t * 0.5 + strandPhase) * 0.2);
+          const ribbonWidth = 12 - strand * 3;
+
+          // Diffuse glow ribbon
+          ctx.beginPath(); ctx.moveTo(ax, ay);
+          ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, bx, by);
+          const rGrad = ctx.createLinearGradient(ax, ay, bx, by);
+          rGrad.addColorStop(0, hexToRgba(a.color, 0));
+          rGrad.addColorStop(0.15, hexToRgba(a.color, ribbonAlpha));
+          rGrad.addColorStop(0.5, `rgba(200,210,255,${ribbonAlpha * 0.6})`);
+          rGrad.addColorStop(0.85, hexToRgba(b.color, ribbonAlpha));
+          rGrad.addColorStop(1, hexToRgba(b.color, 0));
+          ctx.strokeStyle = rGrad; ctx.lineWidth = ribbonWidth; ctx.lineCap = 'round'; ctx.stroke();
+        }
+
+        // Drifting plasma particles along the path
+        for (let p = 0; p < 8; p++) {
+          const flow = ((t * 0.08 + p * 0.125 + i * 0.2) % 1);
+          const ft = flow, inv = 1 - ft;
+          // Cubic bezier interpolation (use middle strand control points)
+          const wave = Math.sin(t * 0.3 + i * 1.7) * 0.15;
+          const c1x = ax + (bx - ax) * 0.33 + perpX * wave;
+          const c1y = ay + (by - ay) * 0.33 + perpY * wave;
+          const c2x = ax + (bx - ax) * 0.66 + perpX * wave * 0.7;
+          const c2y = ay + (by - ay) * 0.66 + perpY * wave * 0.7;
+          const px = inv*inv*inv*ax + 3*inv*inv*ft*c1x + 3*inv*ft*ft*c2x + ft*ft*ft*bx;
+          const py = inv*inv*inv*ay + 3*inv*inv*ft*c1y + 3*inv*ft*ft*c2y + ft*ft*ft*by;
+          // Slight perpendicular drift
+          const drift = Math.sin(t * 0.7 + p * 2.3 + i) * 6;
+          const dpx = px + (perpX / (dist || 1)) * drift;
+          const dpy = py + (perpY / (dist || 1)) * drift;
+          const fade = Math.sin(flow * Math.PI) * 0.35;
+          const pSize = 2 + Math.sin(t * 1.2 + p) * 1.5;
+          const mixR = Math.round(parseInt(a.color.slice(1,3),16) * inv + parseInt(b.color.slice(1,3),16) * ft);
+          const mixG = Math.round(parseInt(a.color.slice(3,5),16) * inv + parseInt(b.color.slice(3,5),16) * ft);
+          const mixB = Math.round(parseInt(a.color.slice(5,7),16) * inv + parseInt(b.color.slice(5,7),16) * ft);
+          const pg = ctx.createRadialGradient(dpx, dpy, 0, dpx, dpy, pSize * 3);
+          pg.addColorStop(0, `rgba(${mixR},${mixG},${mixB},${fade})`);
+          pg.addColorStop(0.4, `rgba(${mixR},${mixG},${mixB},${fade * 0.3})`);
+          pg.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.beginPath(); ctx.arc(dpx, dpy, pSize * 3, 0, Math.PI * 2); ctx.fillStyle = pg; ctx.fill();
+        }
       }
-      this._loggedOnce = true;
-    }
-    // DEBUG: draw bright circles at nebula positions to verify rendering
-    for (const n of this.nebulae) {
-      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed ;
-      const debugX = oc.x + Math.cos(orbAngle) * n.orbitRadius;
-      const debugY = oc.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse;
-      ctx.beginPath();
-      ctx.arc(debugX, debugY, 5, 0, Math.PI * 2);
-      ctx.fillStyle = n.color;
-      ctx.fill();
     }
 
+    // === Nebulae ===
     for (const n of this.nebulae) {
       const breath = 1
-        + Math.sin(t * 0.6 + n.pulseOffset) * 0.04
-        + Math.sin(t * 1.1 + n.pulseOffset * 2.3) * 0.025
-        + Math.sin(t * 0.25 + n.pulseOffset * 0.7) * 0.015;
+        + Math.sin(t * 0.6 + n.pulseOffset) * 0.05
+        + Math.sin(t * 1.1 + n.pulseOffset * 2.3) * 0.03
+        + Math.sin(t * 0.25 + n.pulseOffset * 0.7) * 0.02;
       const r = n.r * breath;
 
-      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed ;
-      const nx = oc.x + Math.cos(orbAngle) * n.orbitRadius + Math.sin(t * 0.15 + n.pulseOffset) * 5;
-      const ny = oc.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse + Math.cos(t * 0.12 + n.pulseOffset) * 4;
+      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed;
+      const nx = oc.x + Math.cos(orbAngle) * n.orbitRadius + Math.sin(t * 0.15 + n.pulseOffset) * 4;
+      const ny = oc.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse + Math.cos(t * 0.12 + n.pulseOffset) * 3;
 
-      const coreBeat = 0.3 + Math.sin(t * 1.5 + n.pulseOffset) * 0.1
-        + Math.max(0, Math.sin(t * 3.0 + n.pulseOffset)) * 0.15;
+      const coreBeat = 0.35 + Math.sin(t * 1.5 + n.pulseOffset) * 0.12
+        + Math.max(0, Math.sin(t * 3.0 + n.pulseOffset)) * 0.18;
 
-      // Halo (ethereal, translucent)
-      const haloShift = Math.sin(t * 0.15 + n.pulseOffset) * r * 0.15;
-      const halo = ctx.createRadialGradient(nx + haloShift, ny - haloShift * 0.5, r * 0.1, nx, ny, r * 2.2);
-      halo.addColorStop(0, hexToRgba(n.color, 0.16));
-      halo.addColorStop(0.3, hexToRgba(n.color, 0.07));
-      halo.addColorStop(0.7, hexToRgba(n.color, 0.025));
+      // Outer halo (wide, ethereal)
+      const haloShift = Math.sin(t * 0.15 + n.pulseOffset) * r * 0.12;
+      const halo = ctx.createRadialGradient(nx + haloShift, ny - haloShift * 0.4, r * 0.05, nx, ny, r * 2.5);
+      halo.addColorStop(0, hexToRgba(n.color, 0.2));
+      halo.addColorStop(0.2, hexToRgba(n.color, 0.1));
+      halo.addColorStop(0.5, hexToRgba(n.color, 0.04));
+      halo.addColorStop(0.8, hexToRgba(n.color, 0.01));
       halo.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.beginPath(); ctx.arc(nx, ny, r * 2.2, 0, Math.PI * 2); ctx.fillStyle = halo; ctx.fill();
+      ctx.beginPath(); ctx.arc(nx, ny, r * 2.5, 0, Math.PI * 2); ctx.fillStyle = halo; ctx.fill();
 
-      // Tendrils
-      for (const td of n.tendrils) {
-        const ta = td.angle + Math.sin(t * 0.15 + td.angle) * 0.3;
-        const sway = Math.sin(t * 0.4 + td.angle * 2) * 0.2;
-        const curLen = td.length + Math.sin(t * 0.3 + td.angle) * 0.15;
-        const sx = nx + Math.cos(ta) * r * 0.3, sy = ny + Math.sin(ta) * r * 0.3;
-        const ex = nx + Math.cos(ta + sway) * r * curLen, ey = ny + Math.sin(ta + sway) * r * curLen;
-        const cpx = (sx + ex) / 2 + Math.cos(ta + Math.PI / 2) * r * (td.curve + Math.sin(t * 0.5 + td.angle) * 0.2);
-        const cpy = (sy + ey) / 2 + Math.sin(ta + Math.PI / 2) * r * (td.curve + Math.cos(t * 0.4 + td.angle) * 0.15);
-        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(cpx, cpy, ex, ey);
-        ctx.strokeStyle = hexToRgba(n.color, td.alpha * 1.5 + Math.sin(t * 0.8 + td.angle) * 0.03);
-        ctx.lineWidth = td.width * (0.8 + Math.sin(t * 0.6 + td.angle) * 0.2);
-        ctx.lineCap = 'round'; ctx.stroke();
-      }
 
-      // Gas cloud layers
-      for (let layer = 0; layer < 5; layer++) {
-        const lr = r * (0.95 - layer * 0.12);
-        const rotSpeed = 0.06 + layer * 0.02;
-        const la = layer * 0.8 + t * rotSpeed * (layer % 2 === 0 ? 1 : -1);
-        const wobble = Math.sin(t * 0.3 + layer * 1.5 + n.pulseOffset) * r * 0.1;
-        const ox = Math.cos(la) * (r * 0.06 * layer + wobble);
-        const oy = Math.sin(la) * (r * 0.05 * layer + wobble * 0.7);
+
+      // Gas cloud layers (7 layers for depth)
+      for (let layer = 0; layer < 7; layer++) {
+        const lr = r * (1.0 - layer * 0.1);
+        const rotSpeed = 0.05 + layer * 0.015;
+        const la = layer * 0.9 + t * rotSpeed * (layer % 2 === 0 ? 1 : -1);
+        const wobble = Math.sin(t * 0.25 + layer * 1.3 + n.pulseOffset) * r * 0.08;
+        const ox = Math.cos(la) * (r * 0.05 * layer + wobble);
+        const oy = Math.sin(la) * (r * 0.04 * layer + wobble * 0.7);
         const gas = ctx.createRadialGradient(nx + ox, ny + oy, 0, nx + ox, ny + oy, lr);
-        const baseAlpha = (0.07 + (4 - layer) * 0.035) * (0.85 + Math.sin(t * 0.7 + layer + n.pulseOffset) * 0.15);
-        gas.addColorStop(0, hexToRgba(n.color, baseAlpha * 1.5));
-        gas.addColorStop(0.35, hexToRgba(n.color, baseAlpha * 0.7));
-        gas.addColorStop(0.75, hexToRgba(n.color, baseAlpha * 0.2));
+        const baseAlpha = (0.08 + (6 - layer) * 0.025) * (0.85 + Math.sin(t * 0.6 + layer + n.pulseOffset) * 0.15);
+        gas.addColorStop(0, hexToRgba(n.color, baseAlpha * 1.8));
+        gas.addColorStop(0.25, hexToRgba(n.color, baseAlpha * 1.0));
+        gas.addColorStop(0.55, hexToRgba(n.color, baseAlpha * 0.4));
+        gas.addColorStop(0.85, hexToRgba(n.color, baseAlpha * 0.08));
         gas.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.beginPath(); ctx.arc(nx + ox, ny + oy, lr, 0, Math.PI * 2); ctx.fillStyle = gas; ctx.fill();
       }
 
-      // Core (soft glow)
-      const coreR = r * (0.15 + coreBeat * 0.1);
+      // Inner bright core with bloom
+      const coreR = r * (0.18 + coreBeat * 0.12);
+      const bloom = ctx.createRadialGradient(nx, ny, 0, nx, ny, coreR * 2);
+      bloom.addColorStop(0, hexToRgba('#ffffff', Math.min(0.5, coreBeat * 0.8)));
+      bloom.addColorStop(0.15, hexToRgba(n.color, Math.min(0.6, coreBeat * 1.2)));
+      bloom.addColorStop(0.5, hexToRgba(n.color, 0.08));
+      bloom.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath(); ctx.arc(nx, ny, coreR * 2, 0, Math.PI * 2); ctx.fillStyle = bloom; ctx.fill();
+
+      // Sharp core point
       const core = ctx.createRadialGradient(nx, ny, 0, nx, ny, coreR);
-      core.addColorStop(0, hexToRgba('#ffffff', Math.min(0.6, coreBeat + 0.2)));
-      core.addColorStop(0.3, hexToRgba(n.color, Math.min(0.7, coreBeat * 1.3)));
+      core.addColorStop(0, hexToRgba('#ffffff', Math.min(0.8, coreBeat + 0.3)));
+      core.addColorStop(0.2, hexToRgba('#ffffff', Math.min(0.5, coreBeat * 0.7)));
+      core.addColorStop(0.5, hexToRgba(n.color, Math.min(0.7, coreBeat * 1.5)));
       core.addColorStop(1, hexToRgba(n.color, 0.0));
       ctx.beginPath(); ctx.arc(nx, ny, coreR, 0, Math.PI * 2); ctx.fillStyle = core; ctx.fill();
 
-      // Particles
+      // Orbiting particles
       for (const p of n.particles) {
         p.angle += p.speed * 0.012 * (0.7 + p.dist * 0.6);
         const ellipse = 0.7 + p.dist * 0.2;
@@ -319,45 +443,51 @@ class CosmosView {
         const distFromCenter = Math.hypot(px - nx, py - ny) / r;
         const twinkle = 0.6 + Math.sin(t * 3 + p.angle * 5) * 0.4;
         const pa = p.brightness * (1 - distFromCenter * 0.5) * twinkle;
-        ctx.beginPath(); ctx.arc(px, py, p.size * (0.8 + Math.sin(t * 2 + p.angle) * 0.2), 0, Math.PI * 2);
+        const pr = p.size * (0.8 + Math.sin(t * 2 + p.angle) * 0.2);
+        ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2);
         ctx.fillStyle = hexToRgba(n.color, pa); ctx.fill();
-        if (p.size > 2 && p.brightness > 0.6) {
-          const flareLen = p.size * (2 + Math.sin(t * 4 + p.angle) * 1);
-          ctx.globalAlpha = pa * 0.35;
+        // Cross flare on bright particles
+        if (p.size > 1.8 && p.brightness > 0.55) {
+          const flareLen = p.size * (2.5 + Math.sin(t * 4 + p.angle) * 1.2);
+          ctx.globalAlpha = pa * 0.4;
           ctx.beginPath();
           ctx.moveTo(px - flareLen, py); ctx.lineTo(px + flareLen, py);
-          ctx.moveTo(px, py - flareLen); ctx.lineTo(px, py + flareLen);
-          ctx.strokeStyle = hexToRgba(n.color, 0.7); ctx.lineWidth = 0.5; ctx.stroke();
+          ctx.moveTo(px, py - flareLen * 0.7); ctx.lineTo(px, py + flareLen * 0.7);
+          ctx.strokeStyle = hexToRgba(n.color, 0.8); ctx.lineWidth = 0.4; ctx.stroke();
           ctx.globalAlpha = 1;
         }
       }
 
-      // Territory ring
-      const dashRot = t * 0.1 + n.pulseOffset;
+      // Territory ring (animated dashes)
+      const dashRot = t * 0.08 + n.pulseOffset;
       ctx.save(); ctx.translate(nx, ny); ctx.rotate(dashRot);
-      ctx.beginPath(); ctx.arc(0, 0, r * 1.05, 0, Math.PI * 2);
-      ctx.strokeStyle = hexToRgba(n.color, 0.05 + Math.sin(t * 0.5 + n.pulseOffset) * 0.02);
-      ctx.lineWidth = 0.8; ctx.setLineDash([3, 10]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(0, 0, r * 1.1, 0, Math.PI * 2);
+      ctx.strokeStyle = hexToRgba(n.color, 0.06 + Math.sin(t * 0.5 + n.pulseOffset) * 0.03);
+      ctx.lineWidth = 0.6; ctx.setLineDash([4, 12]); ctx.stroke(); ctx.setLineDash([]);
       ctx.restore();
     }
 
-    // Shooting star
-    if (Math.sin(t * 0.7) > 0.995) {
-      const sx = Math.random() * CW * 0.6 + CW * 0.2, sy = Math.random() * CH * 0.3;
-      const sLen = 30 + Math.random() * 50;
-      const sGrad = ctx.createLinearGradient(sx, sy, sx + sLen, sy + sLen * 0.4);
-      sGrad.addColorStop(0, 'rgba(255,255,255,0.6)'); sGrad.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + sLen, sy + sLen * 0.4);
-      ctx.strokeStyle = sGrad; ctx.lineWidth = 1.2; ctx.stroke();
+    // === Shooting stars (more frequent, colored) ===
+    const shootFreq = Math.sin(t * 0.5) * 0.5 + Math.sin(t * 1.3) * 0.3 + Math.sin(t * 2.7) * 0.2;
+    if (shootFreq > 0.92) {
+      const sx = Math.random() * CW * 0.7 + CW * 0.15, sy = Math.random() * CH * 0.4;
+      const sLen = 40 + Math.random() * 60;
+      const sAngle = 0.3 + Math.random() * 0.4;
+      const sGrad = ctx.createLinearGradient(sx, sy, sx + sLen, sy + sLen * sAngle);
+      const colors = ['200,220,255', '255,220,180', '180,255,220'];
+      const sc = colors[Math.floor(Math.random() * colors.length)];
+      sGrad.addColorStop(0, `rgba(${sc},0.7)`); sGrad.addColorStop(0.3, `rgba(${sc},0.3)`); sGrad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + sLen, sy + sLen * sAngle);
+      ctx.strokeStyle = sGrad; ctx.lineWidth = 1.5; ctx.stroke();
     }
 
-    // Title
+    // === Title ===
     ctx.font = '600 20px "Noto Sans JP"';
     ctx.fillStyle = 'rgba(200, 220, 245, 0.3)';
     ctx.textAlign = 'center';
     ctx.fillText('\u30B3\u30F3\u30C6\u30AD\u30B9\u30C8\u7A7A\u9593', CW / 2, 50);
 
-    // Usage top-right
+    // === Usage top-right ===
     ctx.font = '700 18px "Noto Sans JP"';
     ctx.fillStyle = 'rgba(74, 222, 128, 0.6)';
     ctx.textAlign = 'right';
@@ -368,21 +498,39 @@ class CosmosView {
     const cx = CW / 2, cy = CH / 2;
     const rx = CW / 2 - 6, ry = CH / 2 - 6;
 
+    // Background ring
     ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 2; ctx.stroke();
 
     const usedAngle = (usedPct / 100) * Math.PI * 2;
+
+    // Glow layer (wider, softer)
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, -Math.PI / 2, -Math.PI / 2 + usedAngle);
+    const glowGrad = ctx.createLinearGradient(0, 0, CW, 0);
+    glowGrad.addColorStop(0, 'rgba(74, 222, 128, 0.15)'); glowGrad.addColorStop(1, 'rgba(210, 140, 80, 0.15)');
+    ctx.strokeStyle = glowGrad; ctx.lineWidth = 8; ctx.stroke();
+
+    // Main arc
     ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, -Math.PI / 2, -Math.PI / 2 + usedAngle);
     const grad = ctx.createLinearGradient(0, 0, CW, 0);
-    grad.addColorStop(0, 'rgba(74, 222, 128, 0.4)'); grad.addColorStop(1, 'rgba(210, 140, 80, 0.4)');
-    ctx.strokeStyle = grad; ctx.lineWidth = 3; ctx.stroke();
+    grad.addColorStop(0, 'rgba(74, 222, 128, 0.5)'); grad.addColorStop(1, 'rgba(210, 140, 80, 0.5)');
+    ctx.strokeStyle = grad; ctx.lineWidth = 2.5; ctx.stroke();
 
+    // Dot with glow
     const dotAngle = -Math.PI / 2 + usedAngle;
     const dotX = cx + rx * Math.cos(dotAngle), dotY = cy + ry * Math.sin(dotAngle);
-    ctx.beginPath(); ctx.arc(dotX, dotY, 4 + Math.sin(t * 3) * 1.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(74, 222, 128, 0.8)'; ctx.fill();
+    const dotR = 4 + Math.sin(t * 3) * 1.5;
+    // Dot glow
+    const dotGlow = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, dotR * 4);
+    dotGlow.addColorStop(0, 'rgba(74, 222, 128, 0.4)');
+    dotGlow.addColorStop(0.5, 'rgba(74, 222, 128, 0.1)');
+    dotGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath(); ctx.arc(dotX, dotY, dotR * 4, 0, Math.PI * 2); ctx.fillStyle = dotGlow; ctx.fill();
+    // Dot
+    ctx.beginPath(); ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(74, 222, 128, 0.9)'; ctx.fill();
 
-    // Draw percentage label just inside the ring near the dot (same size as top-right)
+    // Percentage label near the dot
     const labelOffsetX = (cx - dotX) * 0.06;
     const labelOffsetY = (cy - dotY) * 0.06;
     ctx.font = '700 18px "Noto Sans JP"';

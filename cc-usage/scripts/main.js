@@ -28,10 +28,14 @@ const fetcher = new UsageFetcher();
 const contextProvider = new CliProvider();
 const sessionProvider = new SessionProvider();
 let fetchInterval = null;
+let jsonlWatchInterval = null;
 let lastUsageData = null;
 let lastContextData = null;
+let lastBaselineData = null;  // Cached baseline from cli-provider
+let lastJsonlMtime = 0;      // Track JSONL file changes
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const JSONL_WATCH_MS = 10 * 1000;        // 10 seconds
 
 const LOG_FILE = path.join(require('os').tmpdir(), 'cc-usage-session.log');
 function sessionLog(msg) {
@@ -208,14 +212,14 @@ function openDashboard() {
 
   dashboardWindow.loadFile(path.join(__dirname, 'src', 'renderer', 'dashboard-window.html'));
   dashboardWindow.setVisibleOnAllWorkspaces(true);
-  dashboardWindow.on('closed', () => { dashboardWindow = null; });
+  dashboardWindow.on('closed', () => { dashboardWindow = null; stopJsonlWatch(); });
 
   // Auto-detect active session and fetch context once loaded
   dashboardWindow.webContents.on('did-finish-load', () => {
     if (!sessionProvider.cwd) {
       sessionProvider.autoDetect();
     }
-    fetchContext();
+    fetchContext().then(() => startJsonlWatch());
   });
 }
 
@@ -223,11 +227,53 @@ function openDashboard() {
 // 1. Fetch baseline (System+Tools+Memory+Skills) via claude -p "/context"
 // 2. Read JSONL file for real context usage (cache_read + cache_creation)
 // 3. Messages = JSONL total - baseline
+
+/**
+ * Apply JSONL data to baseline context data.
+ * Shared logic used by both full refresh and JSONL-only refresh.
+ */
+function applyJsonlToContext(data, jsonlData) {
+  // Baseline = sum of active overhead categories only
+  // Exclude: messages (what we're calculating), deferred (not in context), autocompact buffer (reserved space, not actual tokens)
+  const baseline = data.categories
+    .filter(c => c.key !== 'messages'
+      && !c.name.toLowerCase().includes('deferred')
+      && !c.name.toLowerCase().includes('autocompact'))
+    .reduce((sum, c) => sum + c.tokens, 0);
+
+  const messagesTokens = Math.max(0, jsonlData.totalContext - baseline);
+  const messagesPercent = Math.round((messagesTokens / data.totalTokens) * 1000) / 10;
+
+  const msgCat = data.categories.find(c => c.key === 'messages');
+  if (msgCat) {
+    msgCat.tokens = messagesTokens;
+    msgCat.percent = messagesPercent;
+  }
+
+  // Recalculate totals using JSONL total (= actual active context, excludes deferred)
+  data.usedTokens = jsonlData.totalContext;
+  data.usagePercent = Math.round((data.usedTokens / data.totalTokens) * 1000) / 10;
+  data.freeSpace = {
+    tokens: data.totalTokens - data.usedTokens,
+    percent: Math.round((1 - data.usedTokens / data.totalTokens) * 1000) / 10,
+  };
+  // Remove deferred categories from display (not in active context)
+  // Keep autocompact buffer as it's informational
+  data.categories = data.categories.filter(c =>
+    !c.name.toLowerCase().includes('deferred'));
+
+  sessionLog(`Messages: ${messagesTokens} (${messagesPercent}%), baseline: ${baseline}, jsonlTotal: ${jsonlData.totalContext}`);
+  return data;
+}
+
 async function fetchContext() {
   if (dashboardWindow) dashboardWindow.webContents.send('context-fetching');
   try {
     // Fetch baseline via /context (new session, Messages≈0)
     const data = await contextProvider.fetch();
+
+    // Cache baseline for JSONL-only refreshes (deep copy categories)
+    lastBaselineData = JSON.parse(JSON.stringify(data));
 
     // Auto-detect latest session on every refresh
     const detected = sessionProvider.autoDetect();
@@ -236,42 +282,90 @@ async function fetchContext() {
     sessionLog(`baseline cats: ${data.categories.length}, jsonl: ${jsonlData ? 'total=' + jsonlData.totalContext : 'null'}`);
 
     if (jsonlData) {
-      // Baseline = sum of active overhead categories only
-      // Exclude: messages (what we're calculating), deferred (not in context), autocompact buffer (reserved space, not actual tokens)
-      const baseline = data.categories
-        .filter(c => c.key !== 'messages'
-          && !c.name.toLowerCase().includes('deferred')
-          && !c.name.toLowerCase().includes('autocompact'))
-        .reduce((sum, c) => sum + c.tokens, 0);
-
-      const messagesTokens = Math.max(0, jsonlData.totalContext - baseline);
-      const messagesPercent = Math.round((messagesTokens / data.totalTokens) * 1000) / 10;
-
-      const msgCat = data.categories.find(c => c.key === 'messages');
-      if (msgCat) {
-        msgCat.tokens = messagesTokens;
-        msgCat.percent = messagesPercent;
-      }
-
-      // Recalculate totals using JSONL total (= actual active context, excludes deferred)
-      data.usedTokens = jsonlData.totalContext;
-      data.usagePercent = Math.round((data.usedTokens / data.totalTokens) * 1000) / 10;
-      data.freeSpace = {
-        tokens: data.totalTokens - data.usedTokens,
-        percent: Math.round((1 - data.usedTokens / data.totalTokens) * 1000) / 10,
-      };
-      // Remove deferred categories from display (not in active context)
-      // Keep autocompact buffer as it's informational
-      data.categories = data.categories.filter(c =>
-        !c.name.toLowerCase().includes('deferred'));
-      sessionLog(`Messages: ${messagesTokens} (${messagesPercent}%), baseline: ${baseline}, jsonlTotal: ${jsonlData.totalContext}`);
+      applyJsonlToContext(data, jsonlData);
     }
 
     lastContextData = data;
     if (dashboardWindow) dashboardWindow.webContents.send('context-update', data);
+
+    // Track JSONL mtime for change detection
+    updateJsonlMtime();
   } catch (err) {
     console.error('[cc-usage] Context fetch error:', err);
     if (dashboardWindow) dashboardWindow.webContents.send('context-error', err.message);
+  }
+}
+
+/**
+ * Lightweight JSONL-only refresh: re-read JSONL and recalculate Messages
+ * using cached baseline. No cli-provider call needed.
+ * Detects compact events and conversation progression.
+ */
+function refreshFromJsonl() {
+  if (!lastBaselineData || !dashboardWindow) return;
+
+  try {
+    // Re-detect in case session changed
+    sessionProvider.autoDetect();
+    const jsonlData = sessionProvider.fetchFromJsonl();
+    if (!jsonlData) return;
+
+    // Deep copy the cached baseline so we don't mutate the original
+    const data = JSON.parse(JSON.stringify(lastBaselineData));
+    applyJsonlToContext(data, jsonlData);
+
+    lastContextData = data;
+    dashboardWindow.webContents.send('context-update', data);
+
+    // Update footer timestamp
+    data.timestamp = new Date().toISOString();
+  } catch (err) {
+    sessionLog(`JSONL refresh error: ${err.message}`);
+  }
+}
+
+/**
+ * Track JSONL file mtime. Returns true if changed.
+ */
+function updateJsonlMtime() {
+  const jsonlPath = sessionProvider._cachedJsonlPath;
+  if (!jsonlPath) return false;
+  try {
+    const mtime = fs.statSync(jsonlPath).mtimeMs;
+    const changed = lastJsonlMtime > 0 && mtime !== lastJsonlMtime;
+    lastJsonlMtime = mtime;
+    return changed;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Start watching the JSONL file for changes (compact, new messages, etc.)
+ * Runs every 10 seconds while dashboard is open.
+ */
+function startJsonlWatch() {
+  stopJsonlWatch();
+  jsonlWatchInterval = setInterval(() => {
+    if (!dashboardWindow || !sessionProvider._cachedJsonlPath) return;
+    try {
+      const jsonlPath = sessionProvider._cachedJsonlPath;
+      const currentMtime = fs.statSync(jsonlPath).mtimeMs;
+      if (currentMtime !== lastJsonlMtime) {
+        sessionLog(`JSONL changed (mtime: ${lastJsonlMtime} → ${currentMtime}), refreshing...`);
+        lastJsonlMtime = currentMtime;
+        refreshFromJsonl();
+      }
+    } catch (e) {
+      // File may be temporarily locked during write
+    }
+  }, JSONL_WATCH_MS);
+}
+
+function stopJsonlWatch() {
+  if (jsonlWatchInterval) {
+    clearInterval(jsonlWatchInterval);
+    jsonlWatchInterval = null;
   }
 }
 
@@ -368,6 +462,7 @@ function setupIPC() {
 function quitApp() {
   saveConfig();
   if (fetchInterval) clearInterval(fetchInterval);
+  stopJsonlWatch();
   if (mainWindow) mainWindow.destroy();
   app.quit();
 }
@@ -419,4 +514,5 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   if (fetchInterval) clearInterval(fetchInterval);
+  stopJsonlWatch();
 });

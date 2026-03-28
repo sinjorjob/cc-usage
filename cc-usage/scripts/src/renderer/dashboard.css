@@ -672,13 +672,13 @@
 
 /* ===== Footer ===== */
 .dashboard-panel .foot {
-  padding: 7px 16px;
+  padding: 8px 16px;
   border-top: 1px solid rgba(210,140,80,0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 8.5px;
-  color: #555;
+  font-size: 11px;
+  color: #777;
 }
 
 .dashboard-panel .foot .upd {
