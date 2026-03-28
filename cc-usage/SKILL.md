@@ -30,3 +30,13 @@ cd ~/.claude/skills/cc-usage/scripts && npx electron .
 ## 使用率の取得
 
 `~/.claude/.credentials.json` のOAuthトークンを使い、`GET https://api.anthropic.com/api/oauth/usage` APIから正確な使用率を取得する（`/usage` 画面と同じデータソース）。
+
+## コンテキスト空間ダッシュボード
+
+右クリック → 「コンテキスト空間」でコンテキスト使用状況を可視化。
+JNSLファイルの cache_read + cache_creation から Messages トークンをリアルタイム算出。
+
+### 制約事項
+
+- `/compact` または `/clear` を実行した後は、**cc-usageを再起動**する必要がある（セッションIDが変わるため、自動追従できない）
+- Messages の値は `/context` と比べて約1-2Kトークンの誤差がある（JNSLキャッシュ値と /context 推定値の計算方法の違いによる構造的な差）
