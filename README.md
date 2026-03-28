@@ -104,8 +104,7 @@ New-Item -ItemType Directory -Force -Path "$skillDir\scripts\src\renderer"
 
 # 2. ファイルコピー（このREADMEと同じフォルダから実行）
 Copy-Item "cc-usage\SKILL.md" "$skillDir\" -Force
-Copy-Item "cc-usage\scripts\main.js","cc-usage\scripts\preload.js","cc-usage\scripts\usage-fetcher.js","cc-usage\scripts\package.json" "$skillDir\scripts\" -Force
-Copy-Item "cc-usage\scripts\src\renderer\*" "$skillDir\scripts\src\renderer\" -Force
+Copy-Item "cc-usage\scripts\*" "$skillDir\scripts\" -Recurse -Force
 
 # 3. 依存関係インストール
 Set-Location "$skillDir\scripts"
@@ -202,24 +201,46 @@ npx electron .
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#f0f4f8', 'primaryTextColor': '#1a202c', 'primaryBorderColor': '#2b6cb0', 'lineColor': '#2b6cb0', 'secondaryColor': '#ebf8ff', 'tertiaryColor': '#f0f4f8', 'noteBkgColor': '#ebf8ff', 'noteTextColor': '#1a202c', 'noteBorderColor': '#2b6cb0', 'actorBkg': '#ebf8ff', 'actorTextColor': '#1a202c', 'actorBorder': '#2b6cb0', 'signalColor': '#1a202c', 'loopTextColor': '#2b6cb0'}}}%%
 sequenceDiagram
     participant F as 🔑 credentials.json<br/>(ローカルファイル)
+    participant J as 📄 JSONL<br/>(~/.claude/projects/)
+    participant C as 🖥️ claude CLI<br/>(claude -p "/context")
     participant M as ⚙️ Electron Main<br/>(main.js)
     participant A as 🌐 Anthropic OAuth API<br/>(api.anthropic.com)
-    participant R as 🎭 Renderer<br/>(3Dキャラクター)
+    participant R as 🎭 Renderer<br/>(3Dキャラ + ダッシュボード)
 
     Note over M: 🚀 アプリ起動
 
     M->>F: トークン読み込み
     F-->>M: OAuth token（読み取り専用）
 
+    rect rgb(235, 248, 255)
+    Note over M,R: 📊 使用率（5分間隔）
     loop ⏱️ 5分ごとに自動実行
         M->>A: GET /api/oauth/usage
-        Note right of A: ⚡ LLM (Claude) は<br/>一切経由しない
+        Note right of A: ⚡ LLM は経由しない
         A-->>M: utilization + resets_at
         M->>R: IPC: usage-update
-        R->>R: 🟢🟡🔴 ゲージ更新 + アニメーション
+        R->>R: 🟢🟡🔴 ゲージ更新
+    end
     end
 
-    Note over F,R: 🔒 通信先: api.anthropic.com のみ / LLM送信なし / 外部サーバー送信なし
+    rect rgb(240, 244, 248)
+    Note over M,R: 🌌 コンテキスト空間（ダッシュボード起動時）
+    M->>C: claude -p "/context"
+    C-->>M: baseline（System/Tools/Memory/Skills）
+    M->>J: セッション自動検出（assistant timestamp順）
+    J-->>M: cache_read + cache_creation
+    M->>M: Messages = JSONL total - baseline
+    M->>R: IPC: context-update
+    R->>R: Cosmos / Chart / Treemap 描画
+
+    loop ⏱️ 10秒ごとにJSONL監視
+        M->>J: mtime チェック
+        J-->>M: 変更があれば再読み込み
+        M->>R: IPC: context-update（軽量更新）
+    end
+    end
+
+    Note over F,R: 🔒 通信先: api.anthropic.com のみ / JSONL はローカル読み取り専用
 ```
 
 ### セキュリティサマリー
@@ -228,11 +249,12 @@ sequenceDiagram
  🔑  OAuthトークン     ローカル読み取りのみ。外部送信しない
  🌐  通信先            api.anthropic.com（Anthropic公式）のみ
  🚫  LLMへの送信       なし。Claude API は一切呼び出さない
- 📄  取得データ        使用率（%）+ リセット時刻のみ
+ 📄  取得データ        使用率（%）+ リセット時刻 + コンテキストトークン数
  💬  会話内容          アクセスしない。プロンプト・個人データ一切不参照
- 💰  トークン消費      ゼロ。使用率照会は Claude API とは別エンドポイント
+ 💰  トークン消費      使用率照会: ゼロ / コンテキスト baseline 取得: 起動時1回のみ
  📝  credentials.json  Claude Code がログイン時に作成する既存ファイル
                        本ツールは読み取り専用（書き込み・変更なし）
+ 📄  JSONL             ~/.claude/projects/ のセッションファイルを読み取り専用で参照
 ```
 
 <details>
