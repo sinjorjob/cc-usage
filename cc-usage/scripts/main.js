@@ -6,6 +6,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, globalShor
 const path = require('path');
 const fs = require('fs');
 const { UsageFetcher } = require('./usage-fetcher');
+const { CliProvider } = require('./context/cli-provider');
 const { MockProvider } = require('./context/mock-provider');
 
 // Disable GPU shader disk cache
@@ -22,7 +23,8 @@ let mainWindow = null;
 let dashboardWindow = null;
 let tray = null;
 const fetcher = new UsageFetcher();
-const contextProvider = new MockProvider();
+// Use CliProvider (claude -p "/context") with MockProvider fallback
+const contextProvider = new CliProvider();
 let fetchInterval = null;
 let lastUsageData = null;
 let lastContextData = null;

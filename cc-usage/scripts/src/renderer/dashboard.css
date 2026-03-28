@@ -443,9 +443,18 @@
 
 .dashboard-panel .di .nm {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-x: auto;
   white-space: nowrap;
+  min-width: 0;
+}
+
+.dashboard-panel .di .nm::-webkit-scrollbar {
+  height: 2px;
+}
+
+.dashboard-panel .di .nm::-webkit-scrollbar-thumb {
+  background: rgba(210,140,80,0.2);
+  border-radius: 1px;
 }
 
 .dashboard-panel .di .tk {
@@ -522,7 +531,7 @@
   margin-top: 4px;
   font-size: 9.5px;
   color: rgba(255,255,255,0.8);
-  white-space: nowrap;
+  white-space: normal;
   text-shadow: 0 0 8px currentColor, 0 1px 4px rgba(0,0,0,0.9);
   letter-spacing: 0.3px;
   transition: opacity 0.3s, visibility 0.3s;

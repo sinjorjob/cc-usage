@@ -139,7 +139,6 @@
     refreshBtn.addEventListener('click', () => {
       refreshBtn.classList.add('spinning');
       window.dashboardAPI.refreshContext();
-      setTimeout(() => refreshBtn.classList.remove('spinning'), 1000);
     });
 
     // ===== Drag (anywhere on the panel) =====

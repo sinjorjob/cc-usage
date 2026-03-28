@@ -154,13 +154,21 @@ class CosmosView {
     const CW = this.canvas.width, CH = this.canvas.height;
     const scaleX = this.canvas.clientWidth / CW;
     const scaleY = this.canvas.clientHeight / CH;
+    const overlayW = this.canvas.clientWidth;
+    const overlayH = this.canvas.clientHeight;
     const oc = this.orbitCenter;
     for (const { el, n } of this.labelEls) {
       const orbAngle = n.orbitAngle0 + t * n.orbitSpeed;
       const cx = oc.x + Math.cos(orbAngle) * n.orbitRadius;
       const cy = oc.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse;
-      el.style.left = (cx * scaleX - 50) + 'px';
-      el.style.top = (cy * scaleY + n.r * scaleY * 0.35) + 'px';
+      // Clamp position within overlay bounds
+      const labelW = 100;
+      let lx = cx * scaleX - labelW / 2;
+      let ly = cy * scaleY + n.r * scaleY * 0.35;
+      lx = Math.max(0, Math.min(lx, overlayW - labelW));
+      ly = Math.max(0, Math.min(ly, overlayH - 40));
+      el.style.left = lx + 'px';
+      el.style.top = ly + 'px';
     }
   }
 
@@ -251,12 +259,12 @@ class CosmosView {
       const coreBeat = 0.3 + Math.sin(t * 1.5 + n.pulseOffset) * 0.1
         + Math.max(0, Math.sin(t * 3.0 + n.pulseOffset)) * 0.15;
 
-      // Halo
+      // Halo (ethereal, translucent)
       const haloShift = Math.sin(t * 0.15 + n.pulseOffset) * r * 0.15;
       const halo = ctx.createRadialGradient(nx + haloShift, ny - haloShift * 0.5, r * 0.1, nx, ny, r * 2.2);
-      halo.addColorStop(0, hexToRgba(n.color, 0.25));
-      halo.addColorStop(0.3, hexToRgba(n.color, 0.12));
-      halo.addColorStop(0.7, hexToRgba(n.color, 0.04));
+      halo.addColorStop(0, hexToRgba(n.color, 0.16));
+      halo.addColorStop(0.3, hexToRgba(n.color, 0.07));
+      halo.addColorStop(0.7, hexToRgba(n.color, 0.025));
       halo.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.beginPath(); ctx.arc(nx, ny, r * 2.2, 0, Math.PI * 2); ctx.fillStyle = halo; ctx.fill();
 
@@ -270,7 +278,7 @@ class CosmosView {
         const cpx = (sx + ex) / 2 + Math.cos(ta + Math.PI / 2) * r * (td.curve + Math.sin(t * 0.5 + td.angle) * 0.2);
         const cpy = (sy + ey) / 2 + Math.sin(ta + Math.PI / 2) * r * (td.curve + Math.cos(t * 0.4 + td.angle) * 0.15);
         ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(cpx, cpy, ex, ey);
-        ctx.strokeStyle = hexToRgba(n.color, td.alpha * 2.5 + Math.sin(t * 0.8 + td.angle) * 0.05);
+        ctx.strokeStyle = hexToRgba(n.color, td.alpha * 1.5 + Math.sin(t * 0.8 + td.angle) * 0.03);
         ctx.lineWidth = td.width * (0.8 + Math.sin(t * 0.6 + td.angle) * 0.2);
         ctx.lineCap = 'round'; ctx.stroke();
       }
@@ -284,19 +292,19 @@ class CosmosView {
         const ox = Math.cos(la) * (r * 0.06 * layer + wobble);
         const oy = Math.sin(la) * (r * 0.05 * layer + wobble * 0.7);
         const gas = ctx.createRadialGradient(nx + ox, ny + oy, 0, nx + ox, ny + oy, lr);
-        const baseAlpha = (0.12 + (4 - layer) * 0.06) * (0.85 + Math.sin(t * 0.7 + layer + n.pulseOffset) * 0.15);
-        gas.addColorStop(0, hexToRgba(n.color, baseAlpha * 1.8));
-        gas.addColorStop(0.35, hexToRgba(n.color, baseAlpha));
-        gas.addColorStop(0.75, hexToRgba(n.color, baseAlpha * 0.3));
+        const baseAlpha = (0.07 + (4 - layer) * 0.035) * (0.85 + Math.sin(t * 0.7 + layer + n.pulseOffset) * 0.15);
+        gas.addColorStop(0, hexToRgba(n.color, baseAlpha * 1.5));
+        gas.addColorStop(0.35, hexToRgba(n.color, baseAlpha * 0.7));
+        gas.addColorStop(0.75, hexToRgba(n.color, baseAlpha * 0.2));
         gas.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.beginPath(); ctx.arc(nx + ox, ny + oy, lr, 0, Math.PI * 2); ctx.fillStyle = gas; ctx.fill();
       }
 
-      // Core
+      // Core (soft glow)
       const coreR = r * (0.15 + coreBeat * 0.1);
       const core = ctx.createRadialGradient(nx, ny, 0, nx, ny, coreR);
-      core.addColorStop(0, hexToRgba('#ffffff', Math.min(1, coreBeat + 0.4)));
-      core.addColorStop(0.3, hexToRgba(n.color, Math.min(1, coreBeat * 2)));
+      core.addColorStop(0, hexToRgba('#ffffff', Math.min(0.6, coreBeat + 0.2)));
+      core.addColorStop(0.3, hexToRgba(n.color, Math.min(0.7, coreBeat * 1.3)));
       core.addColorStop(1, hexToRgba(n.color, 0.0));
       ctx.beginPath(); ctx.arc(nx, ny, coreR, 0, Math.PI * 2); ctx.fillStyle = core; ctx.fill();
 
@@ -649,23 +657,25 @@ export class ContextDashboard {
     const mcpL = this.panel.querySelector('#mcpL');
 
     if (memL) {
-      const mx = Math.max(...data.memoryFileDetails.map(m => m.tokens));
-      memL.innerHTML = data.memoryFileDetails.map(m =>
+      const sorted = [...data.memoryFileDetails].sort((a, b) => b.tokens - a.tokens);
+      const mx = Math.max(...sorted.map(m => m.tokens));
+      memL.innerHTML = sorted.map(m =>
         `<div class="di"><span class="tr">\u2514</span><span class="nm">${m.path}</span>
          <div class="br"><div class="bf" style="width:${(m.tokens / mx) * 100}%;background:#FFB347"></div></div>
          <span class="tk">${fmt(m.tokens)}</span></div>`).join('');
     }
 
     if (skL) {
-      const mx = Math.max(...data.skillDetails.map(s => s.tokens));
-      skL.innerHTML = data.skillDetails.map(s =>
+      const sorted = [...data.skillDetails].sort((a, b) => b.tokens - a.tokens);
+      const mx = Math.max(...sorted.map(s => s.tokens));
+      skL.innerHTML = sorted.map(s =>
         `<div class="di"><span class="tr">\u2514</span><span class="nm">${s.name}</span>
          <div class="br"><div class="bf" style="width:${(s.tokens / mx) * 100}%;background:#FF6B6B"></div></div>
          <span class="tk">${s.tokens}</span></div>`).join('');
     }
 
     if (mcpL) {
-      const tools = data.mcpTools || [];
+      const tools = [...(data.mcpTools || [])].sort((a, b) => (b.tokens || 0) - (a.tokens || 0));
       const mxMcp = Math.max(...tools.map(t => t.tokens || 0), 1);
       mcpL.innerHTML = tools.map(t =>
         `<div class="di"><span class="tr">\u2514</span><span class="nm">${t.name || t}</span>
