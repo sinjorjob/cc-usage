@@ -10,7 +10,6 @@
     }
   }
   </script>
-  <link rel="stylesheet" href="dashboard.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -19,24 +18,8 @@
       background: transparent;
       user-select: none;
     }
-
-    /* ===== Compact Mode ===== */
-    body.compact #character-container {
-      width: 200px; height: 200px;
-    }
-    body.compact #dashboard-panel { display: none; }
-
-    /* ===== Dashboard Mode ===== */
-    body.dashboard #character-container {
-      width: 110px; height: 110px;
-      position: absolute; top: 12px; left: 14px;
-    }
-    body.dashboard #usage-badge { display: none; }
-    body.dashboard { overflow-y: auto; }
-    body.dashboard::-webkit-scrollbar { width: 3px; }
-    body.dashboard::-webkit-scrollbar-thumb { background: rgba(210,140,80,0.3); border-radius: 2px; }
-
     #character-container {
+      width: 200px; height: 200px;
       position: relative;
       cursor: grab;
     }
@@ -119,7 +102,9 @@
     }
     #usage-badge.fetching #usage-text { color: rgba(210, 175, 140, 0.7); }
 
-    #usage-badge.error #usage-dot { background: #6b7280; }
+    #usage-badge.error #usage-dot {
+      background: #6b7280;
+    }
     #usage-badge.error #usage-text { color: rgba(180, 160, 140, 0.5); }
 
     @keyframes dotPulse {
@@ -141,7 +126,7 @@
     }
   </style>
 </head>
-<body class="compact">
+<body>
   <div id="character-container">
     <canvas id="character-canvas"></canvas>
     <div id="usage-badge" class="fetching">
@@ -152,92 +137,6 @@
       <span id="usage-reset"></span>
     </div>
   </div>
-
-  <!-- Dashboard Panel (hidden in compact mode) -->
-  <div id="dashboard-panel" class="dashboard-panel" style="display:none;">
-    <!-- Top bar: API usage -->
-    <div class="top">
-      <div class="info" style="padding-left:120px;">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <span class="lbl">API Usage (5h window)</span>
-          <span class="model-badge" id="modelBadge">-</span>
-        </div>
-        <div class="bar-outer">
-          <div class="bar-fill green" id="apiBarFill" style="width:0%"></div>
-          <div class="bar-text" id="apiBarText">-</div>
-        </div>
-        <div class="sub-info" id="apiResetInfo"></div>
-      </div>
-    </div>
-
-    <!-- Context section + view toggle -->
-    <div class="shdr">
-      Context Space
-      <div class="view-toggle" style="margin-left:auto;position:relative;z-index:1;">
-        <button class="vt-btn" data-view="chart">Chart</button>
-        <button class="vt-btn" data-view="map">Space Map</button>
-        <button class="vt-btn active" data-view="cosmos">Cosmos</button>
-      </div>
-    </div>
-
-    <!-- Chart View -->
-    <div class="view-panel" id="view-chart">
-      <div class="sbar-wrap"><div class="sbar" id="sBar"></div></div>
-      <div class="chart-row">
-        <div class="donut-w">
-          <canvas id="dCvs" width="300" height="300"></canvas>
-          <div class="donut-c">
-            <div class="u" id="donutUsed">-</div>
-            <div class="t" id="donutTotal">-</div>
-            <div class="p green" id="donutPct">-</div>
-          </div>
-        </div>
-        <div class="leg" id="legEl"></div>
-      </div>
-      <div class="stats-row">
-        <div class="stat-card"><div class="sv">-</div><div class="sl">Free tokens</div></div>
-        <div class="stat-card"><div class="sv">-</div><div class="sl">Autocompact buf</div></div>
-        <div class="stat-card"><div class="sv">-</div><div class="sl">MCP Tools</div></div>
-        <div class="stat-card"><div class="sv">-</div><div class="sl">Memory Files</div></div>
-      </div>
-    </div>
-
-    <!-- Cosmos View (default) -->
-    <div class="view-panel active" id="view-cosmos">
-      <div class="cosmos-wrap">
-        <canvas id="cosmosCanvas" width="816" height="600"></canvas>
-        <div class="cosmos-overlay" id="cosmosOverlay"></div>
-      </div>
-    </div>
-
-    <!-- Space Map View -->
-    <div class="view-panel" id="view-map">
-      <div class="tm-summary">
-        <span>Used: <span class="tm-s-val" id="tmUsed">-</span></span>
-        <span>(<span class="tm-s-val" id="tmPct">-</span>)</span>
-      </div>
-      <div class="treemap-wrap">
-        <div class="treemap" id="treemap"></div>
-      </div>
-    </div>
-
-    <!-- Detail Tabs -->
-    <div class="shdr">Details</div>
-    <div class="thdr">
-      <button class="tb active" data-tab="mem">Memory Files</button>
-      <button class="tb" data-tab="sk">Skills</button>
-      <button class="tb" data-tab="mcp">MCP Tools</button>
-    </div>
-    <div class="tp active" id="tab-mem"><div class="tc" id="memL"></div></div>
-    <div class="tp" id="tab-sk"><div class="tc" id="skL"></div></div>
-    <div class="tp" id="tab-mcp"><div class="tc" id="mcpL"></div></div>
-
-    <div class="foot">
-      <span class="upd" id="footUpdated">-</span>
-      <span id="footModel">-</span>
-    </div>
-  </div>
-
   <script type="module" src="app.js"></script>
 </body>
 </html>

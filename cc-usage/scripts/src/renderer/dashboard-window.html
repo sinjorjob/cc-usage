@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Context Space</title>
+  <link rel="stylesheet" href="dashboard.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+      font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+    }
+
+    /* Close button */
+    .close-btn {
+      position: absolute; top: 8px; right: 8px; z-index: 100;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.5); font-size: 14px; line-height: 22px;
+      text-align: center; cursor: pointer; transition: all 0.15s;
+    }
+    .close-btn:hover { background: rgba(220,80,80,0.3); color: #fff; border-color: rgba(220,80,80,0.5); }
+
+    /* Drag handle */
+    .drag-handle {
+      position: absolute; top: 0; left: 0; right: 30px; height: 36px;
+      cursor: grab; z-index: 50; -webkit-app-region: no-drag;
+    }
+    .drag-handle:active { cursor: grabbing; }
+
+    /* Refresh button */
+    .refresh-btn {
+      position: absolute; top: 8px; right: 40px; z-index: 100;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.5); font-size: 13px; line-height: 22px;
+      text-align: center; cursor: pointer; transition: all 0.15s;
+    }
+    .refresh-btn:hover { background: rgba(74,222,128,0.15); color: #4ade80; border-color: rgba(74,222,128,0.3); }
+    .refresh-btn.spinning { animation: spin 0.8s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="dashboard-panel" style="position:relative; width:460px; height:640px; overflow-y:auto;">
+    <!-- Close / Refresh buttons -->
+    <button class="close-btn" id="closeBtn">&times;</button>
+    <button class="refresh-btn" id="refreshBtn">&#8635;</button>
+
+    <!-- Context section + view toggle -->
+    <div class="shdr" style="padding-top:14px;">
+      Context Space
+      <div class="view-toggle" style="margin-left:auto;position:relative;z-index:1;">
+        <button class="vt-btn" data-view="chart">Chart</button>
+        <button class="vt-btn" data-view="map">Space Map</button>
+        <button class="vt-btn active" data-view="cosmos">Cosmos</button>
+      </div>
+    </div>
+
+    <!-- Chart View -->
+    <div class="view-panel" id="view-chart">
+      <div class="sbar-wrap"><div class="sbar" id="sBar"></div></div>
+      <div class="chart-row">
+        <div class="donut-w">
+          <canvas id="dCvs" width="300" height="300"></canvas>
+          <div class="donut-c">
+            <div class="u" id="donutUsed">-</div>
+            <div class="t" id="donutTotal">-</div>
+            <div class="p green" id="donutPct">-</div>
+          </div>
+        </div>
+        <div class="leg" id="legEl"></div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="sv">-</div><div class="sl">Free tokens</div></div>
+        <div class="stat-card"><div class="sv">-</div><div class="sl">Autocompact buf</div></div>
+        <div class="stat-card"><div class="sv">-</div><div class="sl">MCP Tools</div></div>
+        <div class="stat-card"><div class="sv">-</div><div class="sl">Memory Files</div></div>
+      </div>
+    </div>
+
+    <!-- Cosmos View (default) -->
+    <div class="view-panel active" id="view-cosmos">
+      <div class="cosmos-wrap">
+        <canvas id="cosmosCanvas" width="816" height="600"></canvas>
+        <div class="cosmos-overlay" id="cosmosOverlay"></div>
+      </div>
+    </div>
+
+    <!-- Space Map View -->
+    <div class="view-panel" id="view-map">
+      <div class="tm-summary">
+        <span>Used: <span class="tm-s-val" id="tmUsed">-</span></span>
+        <span>(<span class="tm-s-val" id="tmPct">-</span>)</span>
+      </div>
+      <div class="treemap-wrap">
+        <div class="treemap" id="treemap"></div>
+      </div>
+    </div>
+
+    <!-- Detail Tabs -->
+    <div class="shdr">Details</div>
+    <div class="thdr">
+      <button class="tb active" data-tab="mem">Memory Files</button>
+      <button class="tb" data-tab="sk">Skills</button>
+      <button class="tb" data-tab="mcp">MCP Tools</button>
+    </div>
+    <div class="tp active" id="tab-mem"><div class="tc" id="memL"></div></div>
+    <div class="tp" id="tab-sk"><div class="tc" id="skL"></div></div>
+    <div class="tp" id="tab-mcp"><div class="tc" id="mcpL"></div></div>
+
+    <div class="foot">
+      <span class="upd" id="footUpdated">-</span>
+      <span id="footModel">-</span>
+    </div>
+  </div>
+
+  <script type="module">
+    import { ContextDashboard } from './dashboard.js';
+
+    // Wait for DOM to be fully ready
+    const panel = document.querySelector('.dashboard-panel');
+    console.log('[dashboard] panel:', panel ? 'found' : 'NOT FOUND');
+    console.log('[dashboard] cosmosCanvas:', panel.querySelector('#cosmosCanvas') ? 'found' : 'NOT FOUND');
+    console.log('[dashboard] vt-btn count:', panel.querySelectorAll('.vt-btn').length);
+
+    const dashboard = new ContextDashboard(panel);
+
+    // ===== Close button =====
+    document.getElementById('closeBtn').addEventListener('click', () => {
+      window.dashboardAPI.close();
+    });
+
+    // ===== Refresh button =====
+    const refreshBtn = document.getElementById('refreshBtn');
+    refreshBtn.addEventListener('click', () => {
+      refreshBtn.classList.add('spinning');
+      window.dashboardAPI.refreshContext();
+      setTimeout(() => refreshBtn.classList.remove('spinning'), 1000);
+    });
+
+    // ===== Drag (anywhere on the panel) =====
+    let dragging = false;
+
+    panel.addEventListener('mousedown', async (e) => {
+      // Don't drag from buttons, tabs, or scrollable areas
+      if (e.target.closest('button, .tb, .vt-btn, .tc, .cosmos-label, .close-btn, .refresh-btn')) return;
+      if (e.button !== 0) return;
+      dragging = true;
+      const cursor = await window.dashboardAPI.getCursorPosition();
+      const winPos = await window.dashboardAPI.getPosition();
+      const startX = cursor.x, startY = cursor.y;
+      const winStartX = winPos.x, winStartY = winPos.y;
+
+      const onMove = async () => {
+        if (!dragging) return;
+        const cur = await window.dashboardAPI.getCursorPosition();
+        window.dashboardAPI.dragTo(
+          winStartX + (cur.x - startX),
+          winStartY + (cur.y - startY)
+        );
+      };
+
+      const onUp = () => {
+        dragging = false;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+
+    // ===== Context data =====
+    window.dashboardAPI.onContextUpdate((data) => {
+      console.log('[dashboard] context-update received:', data ? 'OK' : 'null');
+      console.log('[dashboard] categories:', data?.categories?.length);
+      refreshBtn.classList.remove('spinning');
+      dashboard.show(data);
+
+      const footModel = document.getElementById('footModel');
+      if (footModel) footModel.textContent = data.model;
+      const footUpdated = document.getElementById('footUpdated');
+      if (footUpdated) footUpdated.textContent = `Updated ${new Date(data.timestamp).toLocaleTimeString()}`;
+
+      // Donut center
+      const donutUsed = document.getElementById('donutUsed');
+      const donutTotal = document.getElementById('donutTotal');
+      const donutPct = document.getElementById('donutPct');
+      if (donutUsed) donutUsed.textContent = Math.round(data.usedTokens / 1000) + 'k';
+      if (donutTotal) donutTotal.textContent = '/ ' + Math.round(data.totalTokens / 1000).toLocaleString() + 'k';
+      if (donutPct) donutPct.textContent = data.usagePercent + '%';
+
+      // Treemap summary
+      const tmUsed = document.getElementById('tmUsed');
+      const tmPct = document.getElementById('tmPct');
+      if (tmUsed) tmUsed.textContent = Math.round(data.usedTokens / 1000) + 'k / ' + Math.round(data.totalTokens / 1000) + 'k';
+      if (tmPct) tmPct.textContent = data.usagePercent + '%';
+    });
+
+    window.dashboardAPI.onContextFetching(() => {
+      refreshBtn.classList.add('spinning');
+    });
+
+    window.dashboardAPI.onContextError((err) => {
+      console.error('[dashboard] Context error:', err);
+      refreshBtn.classList.remove('spinning');
+    });
+  </script>
+</body>
+</html>

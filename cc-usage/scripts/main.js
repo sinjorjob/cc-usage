@@ -19,17 +19,15 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=128');
 app.commandLine.appendSwitch('disable-features', 'SpellCheck,MediaRouter,TranslateUI');
 
 let mainWindow = null;
+let dashboardWindow = null;
 let tray = null;
 const fetcher = new UsageFetcher();
 const contextProvider = new MockProvider();
 let fetchInterval = null;
 let lastUsageData = null;
 let lastContextData = null;
-let isDashboardMode = false;
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const COMPACT_SIZE = { width: 200, height: 200 };
-const DASHBOARD_SIZE = { width: 440, height: 640 };
 
 // ==================== Config (position save/load) ====================
 const configFile = path.join(app.getPath('userData'), 'cc-usage-config.json');
@@ -168,16 +166,55 @@ async function fetchUsage() {
   }
 }
 
+// ==================== Dashboard Window ====================
+function openDashboard() {
+  if (dashboardWindow) {
+    dashboardWindow.show();
+    dashboardWindow.focus();
+    fetchContext();
+    return;
+  }
+
+  const mainBounds = mainWindow.getBounds();
+  dashboardWindow = new BrowserWindow({
+    width: 460,
+    height: 640,
+    x: mainBounds.x - 480,
+    y: mainBounds.y,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-dashboard.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      spellcheck: false,
+    },
+  });
+
+  dashboardWindow.loadFile(path.join(__dirname, 'src', 'renderer', 'dashboard-window.html'));
+  dashboardWindow.setVisibleOnAllWorkspaces(true);
+  dashboardWindow.on('closed', () => { dashboardWindow = null; });
+
+  // Send context data once loaded
+  dashboardWindow.webContents.on('did-finish-load', () => {
+    fetchContext();
+  });
+}
+
 // ==================== Context Fetching ====================
 async function fetchContext() {
-  if (mainWindow) mainWindow.webContents.send('context-fetching');
+  if (dashboardWindow) dashboardWindow.webContents.send('context-fetching');
   try {
     const data = await contextProvider.fetch();
     lastContextData = data;
-    if (mainWindow) mainWindow.webContents.send('context-update', data);
+    if (dashboardWindow) dashboardWindow.webContents.send('context-update', data);
   } catch (err) {
     console.error('[cc-usage] Context fetch error:', err);
-    if (mainWindow) mainWindow.webContents.send('context-error', err.message);
+    if (dashboardWindow) dashboardWindow.webContents.send('context-error', err.message);
   }
 }
 
@@ -209,26 +246,8 @@ function setupIPC() {
     if (!mainWindow) return;
     const menu = Menu.buildFromTemplate([
       {
-        label: isDashboardMode ? 'ガジェットに戻す' : 'コンテキスト空間',
-        click: () => {
-          isDashboardMode = !isDashboardMode;
-          const size = isDashboardMode ? DASHBOARD_SIZE : COMPACT_SIZE;
-          const bounds = mainWindow.getBounds();
-          const newBounds = {
-            x: isDashboardMode ? Math.max(0, bounds.x - (size.width - bounds.width)) : bounds.x + (bounds.width - size.width),
-            y: bounds.y,
-            width: size.width,
-            height: size.height,
-          };
-          if (!isPositionVisible(newBounds.x, newBounds.y, newBounds.width, newBounds.height)) {
-            const display = screen.getPrimaryDisplay();
-            newBounds.x = Math.max(0, Math.min(newBounds.x, display.workAreaSize.width - newBounds.width));
-            newBounds.y = Math.max(0, Math.min(newBounds.y, display.workAreaSize.height - newBounds.height));
-          }
-          mainWindow.setBounds(newBounds, true);
-          mainWindow.webContents.send('dashboard-mode-changed', { expanded: isDashboardMode });
-          if (isDashboardMode) fetchContext();
-        },
+        label: 'コンテキスト空間',
+        click: () => openDashboard(),
       },
       { type: 'separator' },
       {
@@ -242,6 +261,22 @@ function setupIPC() {
       },
     ]);
     menu.popup({ window: mainWindow });
+  });
+
+  // Dashboard window drag
+  ipcMain.on('dashboard-drag-to', (event, { x, y }) => {
+    if (dashboardWindow) dashboardWindow.setPosition(x, y);
+  });
+
+  ipcMain.handle('get-dashboard-position', () => {
+    if (!dashboardWindow) return { x: 0, y: 0 };
+    const [x, y] = dashboardWindow.getPosition();
+    return { x, y };
+  });
+
+  // Close dashboard
+  ipcMain.on('close-dashboard', () => {
+    if (dashboardWindow) { dashboardWindow.close(); dashboardWindow = null; }
   });
 
   // Manual refresh request

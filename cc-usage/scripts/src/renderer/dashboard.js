@@ -30,6 +30,7 @@ class CosmosView {
   init(data) {
     this.data = data;
     const CW = this.canvas.width, CH = this.canvas.height;
+    console.log('[cosmos] init: canvas=', CW, 'x', CH, 'categories=', data.categories.length);
     this.orbitCenter = { x: CW * 0.48, y: CH / 2 };
 
     // Stars
@@ -132,6 +133,7 @@ class CosmosView {
   }
 
   start() {
+    console.log('[cosmos] start: nebulae=', this.nebulae.length, 'stars=', this.stars.length);
     this.running = true;
     this._loop();
   }
@@ -217,6 +219,24 @@ class CosmosView {
     this._drawRingGauge(ctx, t, CW, CH, usedPct);
 
     // Nebulae
+    if (!this._loggedOnce) {
+      console.log('[cosmos] drawing nebulae:', this.nebulae.length);
+      for (const nb of this.nebulae) {
+        console.log(`  ${nb.name}: r=${nb.r.toFixed(0)} pos=(${nb.x.toFixed(0)},${nb.y.toFixed(0)}) color=${nb.color} orbit=${nb.orbitRadius.toFixed(0)}`);
+      }
+      this._loggedOnce = true;
+    }
+    // DEBUG: draw bright circles at nebula positions to verify rendering
+    for (const n of this.nebulae) {
+      const orbAngle = n.orbitAngle0 + t * n.orbitSpeed;
+      const debugX = oc.x + Math.cos(orbAngle) * n.orbitRadius;
+      const debugY = oc.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse;
+      ctx.beginPath();
+      ctx.arc(debugX, debugY, 5, 0, Math.PI * 2);
+      ctx.fillStyle = n.color;
+      ctx.fill();
+    }
+
     for (const n of this.nebulae) {
       const breath = 1
         + Math.sin(t * 0.6 + n.pulseOffset) * 0.04
@@ -234,9 +254,9 @@ class CosmosView {
       // Halo
       const haloShift = Math.sin(t * 0.15 + n.pulseOffset) * r * 0.15;
       const halo = ctx.createRadialGradient(nx + haloShift, ny - haloShift * 0.5, r * 0.1, nx, ny, r * 2.2);
-      halo.addColorStop(0, hexToRgba(n.color, 0.09));
-      halo.addColorStop(0.3, hexToRgba(n.color, 0.04));
-      halo.addColorStop(0.7, hexToRgba(n.color, 0.015));
+      halo.addColorStop(0, hexToRgba(n.color, 0.25));
+      halo.addColorStop(0.3, hexToRgba(n.color, 0.12));
+      halo.addColorStop(0.7, hexToRgba(n.color, 0.04));
       halo.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.beginPath(); ctx.arc(nx, ny, r * 2.2, 0, Math.PI * 2); ctx.fillStyle = halo; ctx.fill();
 
@@ -250,7 +270,7 @@ class CosmosView {
         const cpx = (sx + ex) / 2 + Math.cos(ta + Math.PI / 2) * r * (td.curve + Math.sin(t * 0.5 + td.angle) * 0.2);
         const cpy = (sy + ey) / 2 + Math.sin(ta + Math.PI / 2) * r * (td.curve + Math.cos(t * 0.4 + td.angle) * 0.15);
         ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(cpx, cpy, ex, ey);
-        ctx.strokeStyle = hexToRgba(n.color, td.alpha + Math.sin(t * 0.8 + td.angle) * 0.03);
+        ctx.strokeStyle = hexToRgba(n.color, td.alpha * 2.5 + Math.sin(t * 0.8 + td.angle) * 0.05);
         ctx.lineWidth = td.width * (0.8 + Math.sin(t * 0.6 + td.angle) * 0.2);
         ctx.lineCap = 'round'; ctx.stroke();
       }
@@ -264,19 +284,19 @@ class CosmosView {
         const ox = Math.cos(la) * (r * 0.06 * layer + wobble);
         const oy = Math.sin(la) * (r * 0.05 * layer + wobble * 0.7);
         const gas = ctx.createRadialGradient(nx + ox, ny + oy, 0, nx + ox, ny + oy, lr);
-        const baseAlpha = (0.05 + (4 - layer) * 0.03) * (0.85 + Math.sin(t * 0.7 + layer + n.pulseOffset) * 0.15);
-        gas.addColorStop(0, hexToRgba(n.color, baseAlpha * 1.6));
+        const baseAlpha = (0.12 + (4 - layer) * 0.06) * (0.85 + Math.sin(t * 0.7 + layer + n.pulseOffset) * 0.15);
+        gas.addColorStop(0, hexToRgba(n.color, baseAlpha * 1.8));
         gas.addColorStop(0.35, hexToRgba(n.color, baseAlpha));
-        gas.addColorStop(0.75, hexToRgba(n.color, baseAlpha * 0.25));
+        gas.addColorStop(0.75, hexToRgba(n.color, baseAlpha * 0.3));
         gas.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.beginPath(); ctx.arc(nx + ox, ny + oy, lr, 0, Math.PI * 2); ctx.fillStyle = gas; ctx.fill();
       }
 
       // Core
-      const coreR = r * (0.12 + coreBeat * 0.08);
+      const coreR = r * (0.15 + coreBeat * 0.1);
       const core = ctx.createRadialGradient(nx, ny, 0, nx, ny, coreR);
-      core.addColorStop(0, hexToRgba('#ffffff', coreBeat + 0.1));
-      core.addColorStop(0.3, hexToRgba(n.color, coreBeat * 1.2));
+      core.addColorStop(0, hexToRgba('#ffffff', Math.min(1, coreBeat + 0.4)));
+      core.addColorStop(0.3, hexToRgba(n.color, Math.min(1, coreBeat * 2)));
       core.addColorStop(1, hexToRgba(n.color, 0.0));
       ctx.beginPath(); ctx.arc(nx, ny, coreR, 0, Math.PI * 2); ctx.fillStyle = core; ctx.fill();
 
@@ -552,13 +572,21 @@ export class ContextDashboard {
   }
 
   _initViewToggle() {
-    this.panel.querySelectorAll('.vt-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.panel.querySelectorAll('.vt-btn').forEach(b => b.classList.remove('active'));
-        this.panel.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+    const btns = this.panel.querySelectorAll('.vt-btn');
+    const panels = this.panel.querySelectorAll('.view-panel');
+    console.log('[dashboard] initViewToggle: buttons=', btns.length, 'panels=', panels.length);
+    btns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // prevent drag from capturing
+        const view = btn.dataset.view;
+        console.log('[dashboard] view toggle clicked:', view);
+        btns.forEach(b => b.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
-        this.panel.querySelector('#view-' + btn.dataset.view).classList.add('active');
-        this.currentView = btn.dataset.view;
+        const target = this.panel.querySelector('#view-' + view);
+        console.log('[dashboard] target panel:', target ? 'found' : 'NOT FOUND');
+        if (target) target.classList.add('active');
+        this.currentView = view;
         if (this.currentView === 'cosmos' && this.cosmosView) this.cosmosView.start();
         else if (this.cosmosView) this.cosmosView.stop();
       });
@@ -610,7 +638,7 @@ export class ContextDashboard {
     if (cards.length >= 4) {
       cards[0].textContent = fmt(data.freeSpace.tokens);
       cards[1].textContent = fmt(data.categories.find(c => c.key === 'autocompact')?.tokens || 0);
-      cards[2].textContent = data.mcpTools.length;
+      cards[2].textContent = (data.mcpTools || []).length;
       cards[3].textContent = data.memoryFileDetails.length;
     }
   }
@@ -637,8 +665,12 @@ export class ContextDashboard {
     }
 
     if (mcpL) {
-      mcpL.innerHTML = data.mcpTools.map(t =>
-        `<div class="di"><span class="tr">\u2514</span><span class="nm">${t}</span></div>`).join('');
+      const tools = data.mcpTools || [];
+      const mxMcp = Math.max(...tools.map(t => t.tokens || 0), 1);
+      mcpL.innerHTML = tools.map(t =>
+        `<div class="di"><span class="tr">\u2514</span><span class="nm">${t.name || t}</span>
+         ${t.tokens ? `<div class="br"><div class="bf" style="width:${(t.tokens / mxMcp) * 100}%;background:#2EE89E"></div></div>
+         <span class="tk">${t.tokens}</span>` : ''}</div>`).join('');
     }
   }
 }
