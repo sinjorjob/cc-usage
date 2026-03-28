@@ -401,14 +401,14 @@
     <div class="shdr">
       Context Space
       <div class="view-toggle" style="margin-left:auto; position:relative; z-index:1;">
-        <button class="vt-btn active" data-view="chart">Chart</button>
+        <button class="vt-btn" data-view="chart">Chart</button>
         <button class="vt-btn" data-view="map">Space Map</button>
-        <button class="vt-btn" data-view="cosmos">Cosmos</button>
+        <button class="vt-btn active" data-view="cosmos">Cosmos</button>
       </div>
     </div>
 
     <!-- ===== Chart View (default) ===== -->
-    <div class="view-panel active" id="view-chart">
+    <div class="view-panel" id="view-chart">
       <div class="sbar-wrap"><div class="sbar" id="sBar"></div></div>
       <div class="chart-row">
         <div class="donut-w">
@@ -430,7 +430,7 @@
     </div>
 
     <!-- ===== Cosmos View ===== -->
-    <div class="view-panel" id="view-cosmos">
+    <div class="view-panel active" id="view-cosmos">
       <div class="cosmos-wrap">
         <canvas id="cosmosCanvas" width="816" height="600"></canvas>
         <div class="cosmos-overlay" id="cosmosOverlay"></div>
@@ -1386,8 +1386,8 @@ function placeCosmoLabels() {
 }
 
 // Cosmos animation loop
-// Cosmos animation loop
-let cosmosRunning = false;
+// Cosmos animation loop (auto-start since Cosmos is default)
+let cosmosRunning = true;
 function cosmosLoop() {
   if (!cosmosRunning) return;
   const t = performance.now() / 1000;
@@ -1406,6 +1406,10 @@ document.querySelectorAll('.vt-btn').forEach(btn => {
     if (cosmosRunning) { placeCosmoLabels(); cosmosLoop(); }
   });
 });
+
+// Auto-start on page load
+placeCosmoLabels();
+cosmosLoop();
 
 drawDonut(); drawBar(); drawLeg(); fillDetails(); drawTreemap();
 </script>
