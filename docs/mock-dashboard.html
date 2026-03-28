@@ -255,11 +255,12 @@
   .cosmos-overlay {
     position: absolute; top: 8px; left: 16px;
     width: 408px; height: 300px; pointer-events: none;
+    z-index: 5;
   }
   .cosmos-label {
     position: absolute; pointer-events: auto; cursor: default;
     text-align: center; transition: transform 0.2s;
-    z-index: 2;
+    z-index: 10;
   }
   .cosmos-label .cl-name {
     font-family: 'Noto Sans JP', sans-serif;
@@ -1011,57 +1012,36 @@ function tokenToRadius(tokens) {
 
 // Pack circles: place largest first at center, then arrange others around
 const sorted = [...CATS].sort((a, b) => b.tokens - a.tokens);
+// Deterministic placement: largest at center, rest evenly spaced around it
+const orbitCenter = { x: CW * 0.48, y: CH / 2 };
 const placed = [];
 
-for (let i = 0; i < sorted.length; i++) {
-  const c = sorted[i];
+// First (largest) at center
+placed.push({ ...sorted[0], x: orbitCenter.x, y: orbitCenter.y, r: tokenToRadius(sorted[0].tokens) });
+
+// Rest placed at equal angles around center
+const others = sorted.slice(1);
+for (let i = 0; i < others.length; i++) {
+  const c = others[i];
   const r = tokenToRadius(c.tokens);
-
-  const cx0 = CW * 0.46, cy0 = CH / 2;
-  const PAD = 50; // boundary padding
-  const GAP = 18; // minimum gap between nebulae
-
-  if (i === 0) {
-    // Largest goes exact center
-    placed.push({ ...c, x: cx0, y: cy0, r });
-  } else {
-    // Spiral outward from center, checking for overlap-free spots
-    let bestX = cx0, bestY = cy0, bestDist = Infinity;
-    let found = false;
-
-    for (let attempt = 0; attempt < 600; attempt++) {
-      // Golden angle spiral for even distribution
-      const goldenAngle = attempt * 2.399963 + i * 0.8;
-      const dist = 20 + attempt * 0.9;
-      const tx = cx0 + Math.cos(goldenAngle) * dist;
-      const ty = cy0 + Math.sin(goldenAngle) * dist * 0.72;
-
-      // Check overlap with all placed nebulae
-      let overlap = false;
-      for (const p of placed) {
-        const dx = tx - p.x, dy = ty - p.y;
-        const minDist = r + p.r + GAP;
-        if (dx * dx + dy * dy < minDist * minDist) { overlap = true; break; }
-      }
-
-      // Stay within bounds
-      if (tx - r < PAD || tx + r > CW - PAD || ty - r < PAD || ty + r > CH - PAD) overlap = true;
-
-      if (!overlap) {
-        const cd = Math.hypot(tx - cx0, ty - cy0);
-        if (cd < bestDist) {
-          bestDist = cd; bestX = tx; bestY = ty;
-          found = true;
-        }
-        if (found && cd < r + 80) break;
-      }
-    }
-    placed.push({ ...c, x: bestX, y: bestY, r });
-  }
+  const angle = (i / others.length) * Math.PI * 2 - Math.PI / 2; // start from top
+  const dist = placed[0].r + r + 50 + r * 0.5; // gap scales with nebula size
+  placed.push({
+    ...c, r,
+    x: orbitCenter.x + Math.cos(angle) * dist,
+    y: orbitCenter.y + Math.sin(angle) * dist * 0.72,
+  });
 }
 
-const nebulae = placed.map(n => ({
+// Orbital parameters
+const nebulae = placed.map((n, i) => {
+  const dx = n.x - orbitCenter.x, dy = n.y - orbitCenter.y;
+  const orbitRadius = Math.hypot(dx, dy);
+  const orbitAngle0 = Math.atan2(dy, dx);
+  const orbitSpeed = i === 0 ? 0.003 : 0.01 / (1 + i * 0.3); // center barely moves
+  return {
   ...n,
+  orbitRadius, orbitAngle0, orbitSpeed, orbitEllipse: 0.7,
   particles: Array.from({length: Math.floor(n.r * 2.5)}, () => ({
     angle: Math.random() * Math.PI * 2,
     dist: Math.random(),
@@ -1079,7 +1059,7 @@ const nebulae = placed.map(n => ({
   pulseOffset: Math.random() * Math.PI * 2,
   driftX: (Math.random() - 0.5) * 0.1,
   driftY: (Math.random() - 0.5) * 0.08,
-}));
+}});
 
 // Floating dust particles in free space
 const dust = Array.from({length: 60}, () => ({
@@ -1192,13 +1172,12 @@ function drawCosmos(t) {
       + Math.sin(t * 0.25 + n.pulseOffset * 0.7) * 0.015;
     const r = n.r * breath;
 
-    // Dynamic wandering drift (Lissajous-like path, wider range)
-    const nx = n.x
-      + Math.sin(t * 0.18 + n.pulseOffset) * 15
-      + Math.sin(t * 0.09 + n.pulseOffset * 1.6) * 10;
-    const ny = n.y
-      + Math.cos(t * 0.14 + n.pulseOffset * 1.3) * 12
-      + Math.cos(t * 0.07 + n.pulseOffset * 0.9) * 7;
+    // Orbital motion (solar system-like revolution around center)
+    const orbAngle = n.orbitAngle0 + t * n.orbitSpeed;
+    const nx = orbitCenter.x + Math.cos(orbAngle) * n.orbitRadius
+      + Math.sin(t * 0.15 + n.pulseOffset) * 5; // tiny wobble
+    const ny = orbitCenter.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse
+      + Math.cos(t * 0.12 + n.pulseOffset) * 4;
 
     // Core brightness fluctuation (like a living heartbeat)
     const coreBeat = 0.3 + Math.sin(t * 1.5 + n.pulseOffset) * 0.1
@@ -1348,25 +1327,37 @@ function hexToRgba(hex, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+// Persistent label elements that track orbital positions each frame
+const cosmoLabelEls = [];
 function placeCosmoLabels() {
   const overlay = document.getElementById('cosmosOverlay');
   overlay.innerHTML = '';
-  const scaleX = 408 / CW, scaleY = 300 / CH;
+  cosmoLabelEls.length = 0;
   for (const n of nebulae) {
     const pct = ((n.tokens / TOT) * 100).toFixed(1);
     const ja = n.ja || n.name;
     const desc = n.desc || '';
     const lbl = document.createElement('div');
     lbl.className = 'cosmos-label';
-    lbl.style.width = '90px';
-    lbl.style.left = (n.x * scaleX - 45) + 'px';
-    lbl.style.top = (n.y * scaleY + n.r * scaleY * 0.35) + 'px';
+    lbl.style.width = '100px';
     lbl.style.color = n.color;
     lbl.style.padding = '6px 0';
     lbl.innerHTML = `<div class="cl-name">${n.name}</div>
       <div class="cl-val">${fmt(n.tokens)} (${pct}%)</div>
       <div class="cl-tip">${ja}: ${desc}</div>`;
     overlay.appendChild(lbl);
+    cosmoLabelEls.push({ el: lbl, n });
+  }
+}
+
+function updateCosmoLabels(t) {
+  const scaleX = 408 / CW, scaleY = 300 / CH;
+  for (const { el, n } of cosmoLabelEls) {
+    const orbAngle = n.orbitAngle0 + t * n.orbitSpeed;
+    const cx = orbitCenter.x + Math.cos(orbAngle) * n.orbitRadius;
+    const cy = orbitCenter.y + Math.sin(orbAngle) * n.orbitRadius * n.orbitEllipse;
+    el.style.left = (cx * scaleX - 50) + 'px';
+    el.style.top = (cy * scaleY + n.r * scaleY * 0.35) + 'px';
   }
 }
 
@@ -1377,6 +1368,7 @@ function cosmosLoop() {
   if (!cosmosRunning) return;
   const t = performance.now() / 1000;
   drawCosmos(t);
+  updateCosmoLabels(t);
   requestAnimationFrame(cosmosLoop);
 }
 
