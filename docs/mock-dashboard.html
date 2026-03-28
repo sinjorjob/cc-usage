@@ -1341,21 +1341,15 @@ function drawCosmos(t) {
   cosmosCtx.fill();
 
   cosmosCtx.font = '700 22px "Noto Sans JP"';
-  cosmosCtx.fillStyle = `rgba(150, 180, 220, ${freeAlpha})`;
+  cosmosCtx.fillStyle = `rgba(200, 220, 245, ${freeAlpha * 1.8})`;
   cosmosCtx.textAlign = 'center';
   cosmosCtx.fillText('\u7A7A\u304D\u9818\u57DF', freeX, freeY);
-  cosmosCtx.font = '400 13px "Noto Sans JP"';
-  cosmosCtx.fillStyle = `rgba(150, 180, 220, ${freeAlpha * 0.7})`;
-  cosmosCtx.fillText(`${fmt(FREE.tokens)} / ${fmt(TOT)} \u30C8\u30FC\u30AF\u30F3 (${((FREE.tokens/TOT)*100).toFixed(1)}%)`, freeX, freeY + 24);
 
-  // Usage summary top-right
+  // Usage summary top-right (usage rate only)
   cosmosCtx.font = '700 15px "Noto Sans JP"';
   cosmosCtx.fillStyle = 'rgba(74, 222, 128, 0.55)';
   cosmosCtx.textAlign = 'right';
   cosmosCtx.fillText(`\u4F7F\u7528\u7387 ${usedPct}%`, CW - 16, 24);
-  cosmosCtx.font = '400 11px "Noto Sans JP"';
-  cosmosCtx.fillStyle = 'rgba(180, 180, 200, 0.35)';
-  cosmosCtx.fillText(`${fmt(TOTAL - FREE.tokens)} / ${fmt(TOT)} \u30C8\u30FC\u30AF\u30F3`, CW - 16, 42);
 }
 
 function hexToRgba(hex, a) {
