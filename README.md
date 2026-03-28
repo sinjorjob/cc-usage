@@ -41,6 +41,7 @@ Claude Codeの使用率（5時間枠）をリアルタイム監視
 | | 機能 | 詳細 |
 |:--:|------|------|
 | 📊 | **正確な使用率表示** | `/usage` と同じデータソース（OAuth API） |
+| 🌌 | **コンテキスト空間ダッシュボード** | 右クリック →「コンテキスト空間」で宇宙風の可視化 |
 | 🎮 | **頭上ゲージバー** | 使用率を色付きバーでリアルタイム表示 |
 | 🔄 | **5分間隔で自動更新** | トークン消費ゼロ（[詳細](#-セキュリティと仕組み)） |
 | 🖱️ | **ドラッグ移動 / ホイール回転** | 自由に配置・視点変更 |
@@ -71,8 +72,7 @@ Claude Codeの使用率（5時間枠）をリアルタイム監視
 ```bash
 mkdir -p ~/.claude/skills/cc-usage/scripts/src/renderer
 cp cc-usage/SKILL.md ~/.claude/skills/cc-usage/
-cp cc-usage/scripts/main.js cc-usage/scripts/preload.js cc-usage/scripts/usage-fetcher.js cc-usage/scripts/package.json ~/.claude/skills/cc-usage/scripts/
-cp cc-usage/scripts/src/renderer/* ~/.claude/skills/cc-usage/scripts/src/renderer/
+cp -r cc-usage/scripts/* ~/.claude/skills/cc-usage/scripts/
 ```
 
 ### Step 2 — 依存関係インストール
@@ -147,14 +147,50 @@ npx electron .
 └── scripts/
     ├── package.json                    # electron, three.js
     ├── main.js                         # Electron メインプロセス
-    ├── preload.js                      # IPC ブリッジ
+    ├── preload.js                      # IPC ブリッジ（3Dキャラ用）
+    ├── preload-dashboard.js            # IPC ブリッジ（ダッシュボード用）
     ├── usage-fetcher.js                # OAuth API 使用率取得
+    ├── context/
+    │   ├── data-provider.js            # プロバイダーインターフェース
+    │   ├── cli-provider.js             # claude -p "/context" 実行
+    │   ├── context-parser.js           # /context 出力パーサー
+    │   ├── mock-provider.js            # モックデータ（開発用）
+    │   └── session-provider.js         # JSONL セッション検出・読み取り
     ├── node_modules/                   # npm install で生成
     └── src/renderer/
         ├── index.html                  # 3D キャンバス + バッジ
         ├── character.js                # Three.js キャラクター + ゲージ
-        └── app.js                      # ウィンドウ制御 + 表示更新
+        ├── app.js                      # ウィンドウ制御 + 表示更新
+        ├── dashboard-window.html       # ダッシュボードウィンドウ
+        ├── dashboard.js                # Cosmos/Chart/Treemap 描画エンジン
+        └── dashboard.css               # ダッシュボード専用スタイル
 ```
+
+---
+
+## 🌌 コンテキスト空間ダッシュボード
+
+右クリック →「コンテキスト空間」で、コンテキストウィンドウの使用状況を宇宙空間風に可視化します。
+
+### 3つのビュー
+
+| ビュー | 説明 |
+|--------|------|
+| **Cosmos**（デフォルト） | 各カテゴリを星雲として表示、オーロラプラズマリボンで接続 |
+| **Chart** | ドーナツチャート + 凡例 + サマリーカード |
+| **Space Map** | Treemap（面積 = トークン量） |
+
+### データ取得方式
+
+- **baseline**（System prompt / System tools / Memory files / Skills）: `claude -p "/context"` で取得
+- **Messages**: JSONL ファイル（`~/.claude/projects/{project}/{session}.jsonl`）の `cache_read + cache_creation` から baseline を引いて算出
+- 10 秒間隔で JSONL ファイル変更を検知し自動更新
+
+### 制約事項
+
+> [!IMPORTANT]
+> - **`/compact` または `/clear` を実行した後は、cc-usage を再起動してください。** セッション ID が変わるため、自動追従ができません。
+> - Messages の値は `/context` と比べて約 1-2K トークンの誤差があります（JSONL キャッシュ値と `/context` 推定値の計算方法の違いによる構造的な差）。
 
 ---
 
