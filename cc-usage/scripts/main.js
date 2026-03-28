@@ -6,6 +6,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, globalShor
 const path = require('path');
 const fs = require('fs');
 const { UsageFetcher } = require('./usage-fetcher');
+const { MockProvider } = require('./context/mock-provider');
 
 // Disable GPU shader disk cache
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
@@ -20,10 +21,15 @@ app.commandLine.appendSwitch('disable-features', 'SpellCheck,MediaRouter,Transla
 let mainWindow = null;
 let tray = null;
 const fetcher = new UsageFetcher();
+const contextProvider = new MockProvider();
 let fetchInterval = null;
 let lastUsageData = null;
+let lastContextData = null;
+let isDashboardMode = false;
 
 const FETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const COMPACT_SIZE = { width: 200, height: 200 };
+const DASHBOARD_SIZE = { width: 440, height: 640 };
 
 // ==================== Config (position save/load) ====================
 const configFile = path.join(app.getPath('userData'), 'cc-usage-config.json');
@@ -72,7 +78,7 @@ function createMainWindow() {
 
   mainWindow = new BrowserWindow({
     width: 200,
-    height: 230,
+    height: 200,
     x: pos.x,
     y: pos.y,
     transparent: true,
@@ -162,6 +168,19 @@ async function fetchUsage() {
   }
 }
 
+// ==================== Context Fetching ====================
+async function fetchContext() {
+  if (mainWindow) mainWindow.webContents.send('context-fetching');
+  try {
+    const data = await contextProvider.fetch();
+    lastContextData = data;
+    if (mainWindow) mainWindow.webContents.send('context-update', data);
+  } catch (err) {
+    console.error('[cc-usage] Context fetch error:', err);
+    if (mainWindow) mainWindow.webContents.send('context-error', err.message);
+  }
+}
+
 function startPolling() {
   // Fetch immediately on start
   fetchUsage();
@@ -190,6 +209,29 @@ function setupIPC() {
     if (!mainWindow) return;
     const menu = Menu.buildFromTemplate([
       {
+        label: isDashboardMode ? 'ガジェットに戻す' : 'コンテキスト空間',
+        click: () => {
+          isDashboardMode = !isDashboardMode;
+          const size = isDashboardMode ? DASHBOARD_SIZE : COMPACT_SIZE;
+          const bounds = mainWindow.getBounds();
+          const newBounds = {
+            x: isDashboardMode ? Math.max(0, bounds.x - (size.width - bounds.width)) : bounds.x + (bounds.width - size.width),
+            y: bounds.y,
+            width: size.width,
+            height: size.height,
+          };
+          if (!isPositionVisible(newBounds.x, newBounds.y, newBounds.width, newBounds.height)) {
+            const display = screen.getPrimaryDisplay();
+            newBounds.x = Math.max(0, Math.min(newBounds.x, display.workAreaSize.width - newBounds.width));
+            newBounds.y = Math.max(0, Math.min(newBounds.y, display.workAreaSize.height - newBounds.height));
+          }
+          mainWindow.setBounds(newBounds, true);
+          mainWindow.webContents.send('dashboard-mode-changed', { expanded: isDashboardMode });
+          if (isDashboardMode) fetchContext();
+        },
+      },
+      { type: 'separator' },
+      {
         label: 'Refresh Usage',
         click: () => fetchUsage(),
       },
@@ -212,6 +254,10 @@ function setupIPC() {
     return lastUsageData;
   });
 
+  // ---- Context data ----
+  ipcMain.on('refresh-context', () => fetchContext());
+
+  ipcMain.handle('get-last-context', () => lastContextData);
 }
 
 // ==================== Quit ====================

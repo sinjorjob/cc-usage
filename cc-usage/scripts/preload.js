@@ -17,4 +17,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUsageUpdate: (callback) => ipcRenderer.on('usage-update', (_, data) => callback(data)),
   onUsageFetching: (callback) => ipcRenderer.on('usage-fetching', () => callback()),
   onUsageError: (callback) => ipcRenderer.on('usage-error', (_, err) => callback(err)),
+
+  // Dashboard toggle
+  toggleDashboard: () => ipcRenderer.send('toggle-dashboard'),
+  onDashboardModeChanged: (callback) => ipcRenderer.on('dashboard-mode-changed', (_, data) => callback(data)),
+
+  // Context data
+  refreshContext: () => ipcRenderer.send('refresh-context'),
+  getLastContext: () => ipcRenderer.invoke('get-last-context'),
+  onContextUpdate: (callback) => ipcRenderer.on('context-update', (_, data) => callback(data)),
+  onContextFetching: (callback) => ipcRenderer.on('context-fetching', () => callback()),
+  onContextError: (callback) => ipcRenderer.on('context-error', (_, err) => callback(err)),
 });
