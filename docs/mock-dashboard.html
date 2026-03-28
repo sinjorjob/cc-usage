@@ -7,7 +7,7 @@
 { "imports": { "three": "https://unpkg.com/three@0.164.0/build/three.module.js" } }
 </script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
@@ -1340,22 +1340,22 @@ function drawCosmos(t) {
   cosmosCtx.fillStyle = freeGlow;
   cosmosCtx.fill();
 
-  cosmosCtx.font = '700 20px Orbitron';
+  cosmosCtx.font = '700 22px "Noto Sans JP"';
   cosmosCtx.fillStyle = `rgba(150, 180, 220, ${freeAlpha})`;
   cosmosCtx.textAlign = 'center';
-  cosmosCtx.fillText('FREE SPACE', freeX, freeY);
-  cosmosCtx.font = '400 12px Orbitron';
+  cosmosCtx.fillText('\u7A7A\u304D\u9818\u57DF', freeX, freeY);
+  cosmosCtx.font = '400 13px "Noto Sans JP"';
   cosmosCtx.fillStyle = `rgba(150, 180, 220, ${freeAlpha * 0.7})`;
-  cosmosCtx.fillText(`${fmt(FREE.tokens)} (${((FREE.tokens/TOT)*100).toFixed(1)}%)`, freeX, freeY + 22);
+  cosmosCtx.fillText(`${fmt(FREE.tokens)} / ${fmt(TOT)} \u30C8\u30FC\u30AF\u30F3 (${((FREE.tokens/TOT)*100).toFixed(1)}%)`, freeX, freeY + 24);
 
   // Usage summary top-right
-  cosmosCtx.font = '600 12px Orbitron';
-  cosmosCtx.fillStyle = 'rgba(74, 222, 128, 0.5)';
+  cosmosCtx.font = '700 15px "Noto Sans JP"';
+  cosmosCtx.fillStyle = 'rgba(74, 222, 128, 0.55)';
   cosmosCtx.textAlign = 'right';
-  cosmosCtx.fillText(`${usedPct}% USED`, CW - 16, 22);
-  cosmosCtx.font = '400 9px Orbitron';
-  cosmosCtx.fillStyle = 'rgba(180, 180, 200, 0.3)';
-  cosmosCtx.fillText(`${fmt(TOTAL - FREE.tokens)} / ${fmt(TOT)} tokens`, CW - 16, 36);
+  cosmosCtx.fillText(`\u4F7F\u7528\u7387 ${usedPct}%`, CW - 16, 24);
+  cosmosCtx.font = '400 11px "Noto Sans JP"';
+  cosmosCtx.fillStyle = 'rgba(180, 180, 200, 0.35)';
+  cosmosCtx.fillText(`${fmt(TOTAL - FREE.tokens)} / ${fmt(TOT)} \u30C8\u30FC\u30AF\u30F3`, CW - 16, 42);
 }
 
 function hexToRgba(hex, a) {
