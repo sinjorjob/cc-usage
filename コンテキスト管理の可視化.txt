@@ -1,0 +1,116 @@
+ClaudeCodeの/contextを実行すると以下のように現在のコンテキスト空間の情報を出力してくれます。
+
+でもこれみづらいじゃない？
+
+cc-usageガジェットに、このコンテキスト空間の状態を超わかりやすくダッシュボード上に可視化するみたいな機能を追加できますか？
+ちょっと設計考えて設計書を作って保存してください。
+
+##実行結果
+
+> /context
+  ⎿  Context Usage
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛀ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁   claude-opus-4-6[1m] · 161k/1000k
+                                                okens (16%)
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   Estimated usage by category
+                                               ⛁ System prompt: 6.3k tokens (0.6%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ System tools: 7.3k tokens (0.7%)
+                                               ⛁ Memory files: 25.1k tokens (2.5%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Skills: 1.5k tokens (0.2%)
+                                               ⛁ Messages: 121.1k tokens (12.1%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛶ Free space: 806k (80.6%)
+                                               ⛝ Autocompact buffer: 33k tokens
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶                         (3.3%)
+
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶
+
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶
+
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶
+
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛝ ⛝ ⛝ ⛝ ⛝ ⛝ ⛝
+
+     MCP tools · /mcp (loaded on-demand)
+
+     Available
+     └ mcp__github__add_issue_comment
+     └ mcp__github__create_branch
+     └ mcp__github__create_issue
+     └ mcp__github__create_or_update_file
+     └ mcp__github__create_pull_request
+     └ mcp__github__create_pull_request_review
+     └ mcp__github__create_repository
+     └ mcp__github__fork_repository
+     └ mcp__github__get_file_contents
+     └ mcp__github__get_issue
+     └ mcp__github__get_pull_request
+     └ mcp__github__get_pull_request_comments
+     └ mcp__github__get_pull_request_files
+     └ mcp__github__get_pull_request_reviews
+     └ mcp__github__get_pull_request_status
+     └ mcp__github__list_commits
+     └ mcp__github__list_issues
+     └ mcp__github__list_pull_requests
+     └ mcp__github__merge_pull_request
+     └ mcp__github__push_files
+     └ mcp__github__search_code
+     └ mcp__github__search_issues
+     └ mcp__github__search_repositories
+     └ mcp__github__search_users
+     └ mcp__github__update_issue
+     └ mcp__github__update_pull_request_branch
+     └ mcp__markitdown__convert_to_markdown
+     └ mcp__survey-insight__analyze_survey
+     └ mcp__survey-insight__extract_keywords
+     └ mcp__survey-insight__generate_wordcloud
+     └ mcp__survey-insight__update_ai_analysis
+
+     Memory files · /memory
+     └ ~.claude\CLAUDE.md: 1.7k tokens
+     └ ~.claude\COMMANDS.md: 1.6k tokens
+     └ ~.claude\FLAGS.md: 2.3k tokens
+     └ ~.claude\PRINCIPLES.md: 1.9k tokens
+     └ ~.claude\RULES.md: 553 tokens
+     └ ~.claude\MCP.md: 2.5k tokens
+     └ ~.claude\PERSONAS.md: 4.6k tokens
+     └ ~.claude\ORCHESTRATOR.md: 5.9k tokens
+     └ ~.claude\MODES.md: 3.2k tokens
+     └ CLAUDE.md: 694 tokens
+     └ ~.claude\projects\C--personal-os\memory\MEMORY.md: 208 tokens
+
+     Skills · /skills
+
+     User
+     └ xlsx: 113 tokens
+     └ docx: 92 tokens
+     └ pptx: 69 tokens
+     └ pdf: 64 tokens
+     └ claude-assist: 37 tokens
+     └ sc:workflow: 28 tokens
+     └ sc:implement: 25 tokens
+     └ sc:task: 24 tokens
+     └ sc:improve: 23 tokens
+     └ cc-usage: 22 tokens
+     └ sc:build: 21 tokens
+     └ sc:spawn: 20 tokens
+     └ sc:troubleshoot: 20 tokens
+     └ sc:cleanup: 19 tokens
+     └ sc:document: 19 tokens
+     └ sc:estimate: 19 tokens
+     └ sc:explain: 19 tokens
+     └ sc:git: 19 tokens
+     └ sc:load: 19 tokens
+     └ sc:analyze: 18 tokens
+     └ sc:index: 18 tokens
+     └ sc:test: 18 tokens
+     └ sc:design: 17 tokens
+     └ housing-loan-deduction: 14 tokens
+     └ our-excel: 14 tokens
+     └ deep-scan: 11 tokens
+     └ env-check: 11 tokens
+     └ our-rules: 11 tokens
+     └ translate-doc: 9 tokens
+
+     Plugin
+     └ ppt-creator: 91 tokens
+     └ playground: 73 tokens
+     └ frontend-design: 67 tokens
